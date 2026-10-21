@@ -12,12 +12,10 @@ import {
   importBackup,
   importLogs,
 } from "@/lib/db";
+import { saveFileToDevice } from "@/lib/file-saver";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import { File, Paths } from "expo-file-system";
-import { EncodingType, StorageAccessFramework } from "expo-file-system/legacy";
 import * as Linking from "expo-linking";
-import * as Sharing from "expo-sharing";
 import { StatusBar } from "expo-status-bar";
 import { memo, useEffect, useRef, useState } from "react";
 import {
@@ -361,30 +359,14 @@ function Settings() {
 
       const finalFileName = `${sanitizedName}${fileExtension}`;
 
-      if (Platform.OS === "android") {
-        const permissions =
-          await StorageAccessFramework.requestDirectoryPermissionsAsync();
-        if (!permissions.granted) {
-          showInfo("Folder access denied. Cannot save file.");
-          return;
-        }
-        const destUri = await StorageAccessFramework.createFileAsync(
-          permissions.directoryUri,
-          sanitizedName,
-          mimeType,
-        );
-        await StorageAccessFramework.writeAsStringAsync(destUri, fileContent, {
-          encoding: EncodingType.UTF8,
-        });
+      const result = await saveFileToDevice({
+        fileName: finalFileName,
+        content: fileContent,
+        mimeType,
+      });
+
+      if (result.success) {
         showInfo(`File saved successfully as ${finalFileName}.`);
-      } else {
-        const file = new File(Paths.cache, finalFileName);
-        file.create({ overwrite: true });
-        file.write(fileContent);
-        await Sharing.shareAsync(file.uri, {
-          dialogTitle: "Save Export File",
-          mimeType,
-        });
       }
 
       setExportType(null);
