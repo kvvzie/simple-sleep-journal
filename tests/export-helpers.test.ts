@@ -73,3 +73,35 @@ test("pageToYearMonth computes correct month and year offsets", () => {
   const dec2025 = pageToYearMonth(50, baseYear, baseMonth);
   assert.deepStrictEqual(dec2025, { year: 2025, month: 11 });
 });
+
+function extractUriFromIntentData(raw: string): string {
+  if (raw.startsWith("content://") || raw.startsWith("file://")) {
+    return raw;
+  }
+  const match = raw.match(/dat=([^\s}]+)/);
+  if (match) {
+    let uri = match[1];
+    if (uri.startsWith("content:/") && !uri.startsWith("content://")) {
+      uri = "content://" + uri.slice("content:/".length);
+    }
+    return uri;
+  }
+  return raw;
+}
+
+test("extractUriFromIntentData parses raw Intent string into valid content URI", () => {
+  const androidIntentString =
+    "Intent { dat=content:/com.android.externalstorage.documents/document/primary%3ADownload%2Fsleepinapp.json flg=0x43 xflg=0x4 }";
+  const extracted = extractUriFromIntentData(androidIntentString);
+  assert.strictEqual(
+    extracted,
+    "content://com.android.externalstorage.documents/document/primary%3ADownload%2Fsleepinapp.json",
+  );
+
+  const directContentUri = "content://com.android.providers.downloads.documents/document/123";
+  assert.strictEqual(extractUriFromIntentData(directContentUri), directContentUri);
+
+  const directFileUri = "file:///storage/emulated/0/Download/test.txt";
+  assert.strictEqual(extractUriFromIntentData(directFileUri), directFileUri);
+});
+
