@@ -91,11 +91,23 @@ function parseArgs() {
 
 function imageFileToBase64DataUri(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;
-  const ext = path.extname(filePath).toLowerCase();
-  const mime =
-    ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
-  const buffer = fs.readFileSync(filePath);
-  return `data:${mime};base64,${buffer.toString("base64")}`;
+  const tmpOut = path.join("/tmp", `build_opt_${Date.now()}_${Math.random().toString(36).slice(2)}.jpg`);
+  try {
+    execSync(
+      `ffmpeg -y -i "${filePath}" -vf "scale=1080:-2" -q:v 4 "${tmpOut}" 2>/dev/null`,
+    );
+    const buffer = fs.readFileSync(tmpOut);
+    try {
+      fs.unlinkSync(tmpOut);
+    } catch {}
+    return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+  } catch {
+    const ext = path.extname(filePath).toLowerCase();
+    const mime =
+      ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+    const buffer = fs.readFileSync(filePath);
+    return `data:${mime};base64,${buffer.toString("base64")}`;
+  }
 }
 
 async function run() {
@@ -112,9 +124,9 @@ async function run() {
   let bodyCareEnabled =
     args.bodyCare !== undefined
       ? args.bodyCare !== "false"
-      : mode === "baked"
-        ? false
-        : true;
+      : mode === "dynamic"
+        ? true
+        : false;
   let moodStarsEnabled =
     args.moodStars !== undefined ? args.moodStars !== "false" : true;
   let commentsEnabled =

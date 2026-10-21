@@ -30,15 +30,15 @@ export function getGridRowHeight(screenHeight: number, rows: number) {
 export function getDayColor(type: string, colors: any) {
   switch (type) {
     case "today":
-      return colors.calendarToday;
+      return colors.calendarToday || colors.text;
     case "logged":
-      return colors.calendarDayLogged;
+      return colors.calendarDayLogged || colors.text;
     case "future":
-      return colors.calendarDayFuture;
+      return colors.calendarDayFuture || colors.textSecondary;
     case "otherMonth":
-      return colors.calendarDayOtherMonth;
+      return colors.calendarDayOtherMonth || colors.textSecondary;
     default:
-      return colors.calendarDayUnlogged;
+      return colors.calendarDayUnlogged || colors.textSecondary;
   }
 }
 

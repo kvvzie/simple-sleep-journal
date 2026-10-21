@@ -33,7 +33,7 @@ export const BASE_PALETTE: { light: ThemePaletteColors; dark: ThemePaletteColors
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   colorSchemeToggleEnabled: true,
-  bodyCareEnabled: true,
+  bodyCareEnabled: false,
   moodStarsEnabled: true,
   commentsEnabled: true,
   gridPickerEnabled: true,

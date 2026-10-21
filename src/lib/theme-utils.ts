@@ -16,8 +16,13 @@ export function resolveEffectiveColors(
 ): ThemePaletteColors {
   const base = BASE_PALETTE[scheme];
   const overrides = palette?.[scheme] || {};
+  const textColor = overrides.text || base.text;
+  const textSecondaryColor = overrides.textSecondary || base.textSecondary;
   return {
     ...base,
+    calendarDayLogged: textColor,
+    calendarToday: textColor,
+    calendarDayUnlogged: textSecondaryColor,
     ...overrides,
   };
 }

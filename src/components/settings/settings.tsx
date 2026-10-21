@@ -17,6 +17,7 @@ import { ThemePaletteColors } from "@/types/appearance";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
 import { memo, useEffect, useRef, useState } from "react";
@@ -198,7 +199,14 @@ function Settings() {
       if (res.canceled || !res.assets || res.assets.length === 0) return;
       const asset = res.assets[0];
 
-      updateBackground(targetScreen, asset.uri);
+      const manipulated = await manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1080 } }],
+        { compress: 0.75, format: SaveFormat.JPEG, base64: true },
+      );
+
+      const compressedDataUri = `data:image/jpeg;base64,${manipulated.base64}`;
+      updateBackground(targetScreen, compressedDataUri);
       showInfo(`${targetScreen} background updated!`);
     } catch {
       showInfo("Failed to load image file.");
@@ -510,6 +518,14 @@ function Settings() {
     DeviceEventEmitter.emit("refreshCalendarGrid");
   };
 
+  const isThemeModified = Boolean(
+    (theme.palette?.light && Object.keys(theme.palette.light).length > 0) ||
+    (theme.palette?.dark && Object.keys(theme.palette.dark).length > 0) ||
+    (theme.font?.name && theme.font.name !== "Redaction") ||
+    theme.backgrounds?.calendar ||
+    theme.backgrounds?.settings
+  );
+
   return (
     <View
       style={[
@@ -523,15 +539,15 @@ function Settings() {
         <Pressable
           onPress={() => setStudioModalVisible(true)}
           hitSlop={16}
-          style={styles.topLeftFloatingButton}
+          style={styles.topRightFloatingButton}
         >
           <Ionicons name="color-wand-outline" size={24} color={colors.text} />
         </Pressable>
-      ) : (
+      ) : isThemeModified ? (
         <Pressable
           onPress={() => setResetConfirmVisible(true)}
           hitSlop={16}
-          style={styles.topLeftFloatingButton}
+          style={styles.topRightFloatingButton}
         >
           <Ionicons
             name="arrow-undo-outline"
@@ -539,7 +555,7 @@ function Settings() {
             color={colors.textSecondary}
           />
         </Pressable>
-      )}
+      ) : null}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -1232,8 +1248,10 @@ function Settings() {
             </View>
 
             <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 20 }}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled={true}
+              contentContainerStyle={{ paddingBottom: 36 }}
             >
               <Text
                 style={[
@@ -1724,6 +1742,67 @@ function Settings() {
                   color={colors.text}
                 />
               </Pressable>
+
+              {!features.gridPickerEnabled && (
+                <View
+                  style={[
+                    styles.studioCard,
+                    {
+                      backgroundColor: colors.backgroundElement,
+                      borderColor: colors.textSecondary,
+                      marginTop: 4,
+                      marginBottom: 12,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.studioLabel,
+                      { color: colors.text, fontFamily: resolveFont("bold") },
+                    ]}
+                  >
+                    locked grid size ({GRID_STEPS[stepIndex].rows}x{GRID_STEPS[stepIndex].columns})
+                  </Text>
+                  <View style={styles.gridStepRow}>
+                    {GRID_STEPS.map((step, idx) => {
+                      const isSelected = idx === stepIndex;
+                      return (
+                        <Pressable
+                          key={idx}
+                          onPress={() => setStepIndex(idx)}
+                          style={[
+                            styles.gridStepChip,
+                            {
+                              backgroundColor: isSelected
+                                ? colors.text
+                                : colors.background,
+                              borderColor: isSelected
+                                ? colors.text
+                                : colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.gridStepChipText,
+                              {
+                                color: isSelected
+                                  ? colors.background
+                                  : colors.text,
+                                fontFamily: resolveFont(
+                                  isSelected ? "bold" : "regular",
+                                ),
+                              },
+                            ]}
+                          >
+                            {step.rows}x{step.columns}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
               <View style={{ marginTop: 20 }}>
                 <Pressable

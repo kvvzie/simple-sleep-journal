@@ -385,11 +385,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1.5,
     justifyContent: "center",
-    paddingHorizontal: 12,
   },
   hexText: {
+    width: "100%",
+    height: "100%",
     fontSize: 16,
     fontWeight: "bold",
+    textAlignVertical: "center",
+    paddingVertical: 0,
+    paddingHorizontal: 12,
+    includeFontPadding: false,
   },
   paletteRow: {
     flexDirection: "row",

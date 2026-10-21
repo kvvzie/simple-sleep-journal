@@ -54,14 +54,6 @@ export default function TabsLayout() {
               cachePolicy="memory-disk"
             />
           )}
-          {backgrounds.calendar && (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: colors.background, opacity: 0.65 },
-              ]}
-            />
-          )}
           <CalendarGrid />
         </View>
 
@@ -72,14 +64,6 @@ export default function TabsLayout() {
               style={StyleSheet.absoluteFill}
               contentFit="cover"
               cachePolicy="memory-disk"
-            />
-          )}
-          {backgrounds.settings && (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: colors.background, opacity: 0.65 },
-              ]}
             />
           )}
           <Settings />

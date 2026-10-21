@@ -5,6 +5,25 @@ import { useEffect, useRef } from "react";
 import { Animated, PanResponder, Pressable, View } from "react-native";
 import { styles } from "./nav-bar.styles";
 
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "").trim();
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (clean.length === 3) {
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else if (clean.length === 6) {
+    r = parseInt(clean.slice(0, 2), 16);
+    g = parseInt(clean.slice(2, 4), 16);
+    b = parseInt(clean.slice(4, 6), 16);
+  } else if (clean.startsWith("rgb")) {
+    return clean;
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export default function NavBar() {
   const { colors } = useAppearance();
   const { screen, setScreen } = useNavDirection();
@@ -49,7 +68,7 @@ export default function NavBar() {
         styles.wrapper,
         {
           borderColor: colors.textSecondary,
-          backgroundColor: colors.background,
+          backgroundColor: hexToRgba(colors.background, 0.5),
         },
       ]}
       {...swipePan.panHandlers}

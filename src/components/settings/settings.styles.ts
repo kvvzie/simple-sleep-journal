@@ -19,17 +19,27 @@ export const styles = StyleSheet.create({
     marginTop: 16,
   },
   title: { fontSize: 48 },
-  topLeftFloatingButton: {
+  topRightFloatingButton: {
     position: "absolute",
-    top: 24,
-    left: 20,
+    top: 48,
+    right: 24,
     zIndex: 99,
     padding: 8,
   },
-  wandButton: {
-    position: "absolute",
-    right: 28,
-    padding: 8,
+  gridStepRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  gridStepChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  gridStepChipText: {
+    fontSize: 13,
   },
 
   gridRow: {
