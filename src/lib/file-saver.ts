@@ -1,5 +1,7 @@
 import { File, Paths } from "expo-file-system";
+import * as IntentLauncher from "expo-intent-launcher";
 import * as Sharing from "expo-sharing";
+import { Platform } from "react-native";
 
 export type SaveFileOptions = {
   fileName: string;
@@ -18,46 +20,38 @@ export async function saveFileToDevice({
   content,
   mimeType,
 }: SaveFileOptions): Promise<SaveFileResult> {
+  if (Platform.OS === "android") {
+    const result = await IntentLauncher.startActivityAsync(
+      "android.intent.action.CREATE_DOCUMENT",
+      {
+        category: "android.intent.category.OPENABLE",
+        type: mimeType,
+        extra: {
+          "android.intent.extra.TITLE": fileName,
+        },
+        flags: 3,
+      },
+    );
+
+    if (result.resultCode === IntentLauncher.ResultCode.Success && result.data) {
+      const destinationFile = new File(result.data);
+      destinationFile.write(content);
+      return { success: true, uri: result.data };
+    }
+
+    return { success: false, canceled: true };
+  }
+
   const file = new File(Paths.cache, fileName);
   file.create({ overwrite: true });
   file.write(content);
 
-  try {
-    const { saveDocuments } = require("@react-native-documents/picker");
-    const results = await saveDocuments({
-      sourceUris: [file.uri],
-      fileName,
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(file.uri, {
+      dialogTitle: `Save ${fileName}`,
       mimeType,
     });
-
-    if (results && results.length > 0) {
-      const first = results[0];
-      if (first.error) {
-        throw new Error(first.error);
-      }
-      if (first.uri) {
-        return { success: true, uri: first.uri };
-      }
-    }
-  } catch (err: any) {
-    const msg = String(err?.message ?? err).toLowerCase();
-    if (
-      msg.includes("cancel") ||
-      msg.includes("user") ||
-      msg.includes("aborted")
-    ) {
-      return { success: false, canceled: true };
-    }
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(file.uri, {
-        dialogTitle: `Save ${fileName}`,
-        mimeType,
-      });
-      return { success: true, uri: file.uri };
-    }
-
-    throw err;
+    return { success: true, uri: file.uri };
   }
 
   return { success: false };
