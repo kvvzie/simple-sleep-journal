@@ -218,17 +218,33 @@ The system enforces strict behavioral rules based on `buildConfig.mode`:
 ### 5.3 Dynamic Font Loading
 When a user selects a custom `.ttf` or `.otf` file in the Appearance Studio, it is loaded dynamically into the React Native font registry using `Font.loadAsync({ [fontName]: uri })`. The `resolveFont(variant)` utility automatically maps font weight slots (`display`, `title`, `bold`, `regular`, `italic`) to the custom loaded font family or falls back to the corresponding Redaction weight.
 
-### 5.4 Readability Scrim Mathematics
-When custom background images are set for the Calendar or Settings screens, the content is rendered over an `ImageBackground` with an absolute fill scrim:
+### 5.4 Wallpaper Layering & Readability Scrim Mathematics
+When custom background images are set for the Calendar or Settings screens, the tab layout renders an `Image` with an absolute fill scrim:
 ```tsx
-<View
-  style={[
-    StyleSheet.absoluteFill,
-    { backgroundColor: colors.background, opacity: 0.65 },
-  ]}
-/>
+<View style={{ width, height: "100%", backgroundColor: colors.background }}>
+  {backgrounds.calendar && (
+    <Image
+      source={{ uri: backgrounds.calendar }}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+    />
+  )}
+  {backgrounds.calendar && (
+    <View
+      style={[
+        StyleSheet.absoluteFill,
+        { backgroundColor: colors.background, opacity: 0.65 },
+      ]}
+    />
+  )}
+  <CalendarGrid />
+</View>
 ```
-This 65% opacity overlay blends the user's custom photo with the active theme background, ensuring contrast ratios remain compliant with WCAG accessibility guidelines while preserving full visual texture.
+To ensure wallpaper visibility, `CalendarGrid` and `Settings` root containers apply `{ backgroundColor: backgrounds[screen] ? "transparent" : colors.background }`. The 65% opacity theme-colored overlay blends the user's custom photo with the active theme background, ensuring typography contrast ratios remain strictly WCAG-compliant while displaying the wallpaper textures.
+
+### 5.5 Font Credits Suppression Rule
+The Settings screen maintains full author attribution and typography credits for the original Redaction typeface. When a custom font is active (or in baked builds using Comic Sans), the font credits section automatically hides to reflect the active font family. Once appearance is reset back to Redaction, the complete original credits block reappears.
 
 ---
 
@@ -298,7 +314,17 @@ This 65% opacity overlay blends the user's custom photo with the active theme ba
 - **Imperative Handle**: Exposes `bump(delta)` and `syncTo(page)` via `useImperativeHandle` for external synchronization without triggering recursive render cycles.
 - **Multi-Picker Synchronization Lock**: Features a shared `lockRef` mechanism that prevents simultaneous touch-stealing when multiple wheel pickers (e.g. rows and columns) are adjacent.
 
-### 6.6 `ConfirmDialog` (`src/components/confirm-dialog/`)
+### 6.6 `GoogleColorPicker` (`src/components/color-picker/`)
+- **File Structure**:
+  - `google-color-picker.tsx`: Interactive color picker component modeled after Google's hex color picker.
+- **Color Mathematics & Color Space**:
+  - Full bidirectional conversion between RGB, Hex, and HSV color spaces (`hsvToRgb`, `rgbToHsv`, `hexToRgb`, `rgbToHex`).
+  - Interactive 2D Saturation / Value plane: Layered with a horizontal white-to-transparent gradient and vertical transparent-to-black gradient over the pure hue background color.
+  - Interactive 1D Hue spectrum slider: 360° continuous rainbow strip with draggable thumb.
+  - Direct Hex input field with two-way reactive state binding and instant validation.
+  - Quick palette chips for rapid selection of popular theme swatches.
+
+### 6.7 `ConfirmDialog` (`src/components/confirm-dialog/`)
 - **File Structure**:
   - `confirm-dialog.tsx`: Reusable modal confirmation dialog.
   - `confirm-dialog.styles.ts`: Modal backdrop, dialog card, and affirmative/negative buttons.

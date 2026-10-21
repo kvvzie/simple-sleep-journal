@@ -16,6 +16,7 @@ import { saveFileToDevice } from "@/lib/file-saver";
 import { ThemePaletteColors } from "@/types/appearance";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import { Image } from "expo-image";
 import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
 import { memo, useEffect, useRef, useState } from "react";
@@ -30,6 +31,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { GoogleColorPicker } from "../color-picker/google-color-picker";
 import ConfirmDialog from "../confirm-dialog";
 import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
 import { styles } from "./settings.styles";
@@ -42,21 +44,6 @@ const columnsPageForStep = (idx: number) => MAX_STEP - idx;
 const columnsStepForPage = (page: number) => MAX_STEP - page;
 
 const MOOD_SCALE_MAX = 10;
-
-const QUICK_SWATCHES = [
-  "#000000",
-  "#ffffff",
-  "#141724",
-  "#00FFCC",
-  "#1C1714",
-  "#F5E2CF",
-  "#101813",
-  "#CBE8D0",
-  "#18121E",
-  "#F1D2FF",
-  "#FFB3BA",
-  "#60646C",
-];
 
 function Settings() {
   const scheme = useAppColorScheme();
@@ -92,6 +79,7 @@ function Settings() {
   const gridLockRef = useRef<string | null>(null);
 
   const [studioModalVisible, setStudioModalVisible] = useState(false);
+  const [activeColorTab, setActiveColorTab] = useState<keyof ThemePaletteColors>("background");
   const [exportFormatDialogVisible, setExportFormatDialogVisible] = useState(false);
   const [importChoiceDialogVisible, setImportChoiceDialogVisible] = useState(false);
   const [exportType, setExportType] = useState<"json" | "txt" | "csv" | "theme" | null>(null);
@@ -522,74 +510,36 @@ function Settings() {
     DeviceEventEmitter.emit("refreshCalendarGrid");
   };
 
-  const renderColorField = (
-    label: string,
-    key: keyof ThemePaletteColors,
-  ) => {
-    const activeVal = colors[key] || "#000000";
-    return (
-      <View key={key} style={{ marginBottom: 12 }}>
-        <View style={styles.colorFieldRow}>
-          <Text
-            style={[
-              styles.studioLabel,
-              { color: colors.text, fontFamily: resolveFont("regular") },
-            ]}
-          >
-            {label}
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View
-              style={[
-                styles.colorSwatch,
-                {
-                  backgroundColor: activeVal,
-                  borderColor: colors.textSecondary,
-                },
-              ]}
-            />
-            <TextInput
-              style={[
-                styles.hexInput,
-                {
-                  color: colors.text,
-                  borderColor: colors.textSecondary,
-                  fontFamily: resolveFont("regular"),
-                },
-              ]}
-              value={activeVal}
-              onChangeText={(txt) => {
-                const formatted = txt.startsWith("#") ? txt : `#${txt}`;
-                updateColorOverride(scheme, key, formatted);
-              }}
-              placeholder="#hex"
-              placeholderTextColor={colors.textSecondary}
-              maxLength={9}
-            />
-          </View>
-        </View>
-        <View style={styles.swatchRow}>
-          {QUICK_SWATCHES.map((swatchColor) => (
-            <Pressable
-              key={swatchColor}
-              onPress={() => updateColorOverride(scheme, key, swatchColor)}
-              style={[
-                styles.quickSwatch,
-                {
-                  backgroundColor: swatchColor,
-                  borderColor: colors.textSecondary,
-                },
-              ]}
-            />
-          ))}
-        </View>
-      </View>
-    );
-  };
-
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: backgrounds.settings ? "transparent" : colors.background },
+      ]}
+    >
       <StatusBar style={scheme === "dark" ? "light" : "dark"} animated />
+
+      {features.inAppCustomizationEnabled ? (
+        <Pressable
+          onPress={() => setStudioModalVisible(true)}
+          hitSlop={16}
+          style={styles.topLeftFloatingButton}
+        >
+          <Ionicons name="color-wand-outline" size={24} color={colors.text} />
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={() => setResetConfirmVisible(true)}
+          hitSlop={16}
+          style={styles.topLeftFloatingButton}
+        >
+          <Ionicons
+            name="arrow-undo-outline"
+            size={22}
+            color={colors.textSecondary}
+          />
+        </Pressable>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -604,28 +554,6 @@ function Settings() {
           >
             settings
           </Text>
-
-          {features.inAppCustomizationEnabled ? (
-            <Pressable
-              onPress={() => setStudioModalVisible(true)}
-              hitSlop={14}
-              style={styles.wandButton}
-            >
-              <Ionicons name="color-wand-outline" size={24} color={colors.text} />
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => setResetConfirmVisible(true)}
-              hitSlop={14}
-              style={styles.wandButton}
-            >
-              <Ionicons
-                name="sparkles-outline"
-                size={22}
-                color={colors.textSecondary}
-              />
-            </Pressable>
-          )}
         </View>
 
         {features.gridPickerEnabled && loaded && (
@@ -764,86 +692,90 @@ function Settings() {
           </>
         )}
 
-        <Text
-          style={[
-            styles.creditsLabel,
-            { color: colors.textSecondary, fontFamily: resolveFont("italic") },
-          ]}
-        >
-          font credits
-        </Text>
-        <Text
-          style={[
-            styles.creditRole,
-            { color: colors.textSecondary, fontFamily: resolveFont("regular") },
-          ]}
-        >
-          typeface design
-        </Text>
-        <Text
-          style={[
-            styles.creditName,
-            { color: colors.text, fontFamily: resolveFont("regular") },
-          ]}
-        >
-          Jeremy Mickel
-        </Text>
-
-        <Text
-          style={[
-            styles.creditRole,
-            { color: colors.textSecondary, fontFamily: resolveFont("regular") },
-          ]}
-        >
-          creative direction
-        </Text>
-        <Text
-          style={[
-            styles.creditName,
-            { color: colors.text, fontFamily: resolveFont("regular") },
-          ]}
-        >
-          Forest Young
-        </Text>
-
-        <Text
-          style={[
-            styles.creditRole,
-            { color: colors.textSecondary, fontFamily: resolveFont("regular") },
-          ]}
-        >
-          the redaction
-        </Text>
-        <View style={styles.redactionBlock}>
-          <Text
-            style={[
-              styles.creditName,
-              { color: colors.text, fontFamily: resolveFont("regular") },
-            ]}
-          >
-            Titus Kaphar
-          </Text>
-          <Text
-            style={[
-              styles.creditName,
-              { color: colors.text, fontFamily: resolveFont("regular") },
-            ]}
-          >
-            Reginald Dwayne Betts
-          </Text>
-          <Pressable
-            onPress={() => Linking.openURL("https://www.redaction.us/")}
-          >
+        {(!theme.font || !theme.font.name || theme.font.name === "Redaction") && (
+          <>
             <Text
               style={[
-                styles.redactionLink,
+                styles.creditsLabel,
+                { color: colors.textSecondary, fontFamily: resolveFont("italic") },
+              ]}
+            >
+              font credits
+            </Text>
+            <Text
+              style={[
+                styles.creditRole,
+                { color: colors.textSecondary, fontFamily: resolveFont("regular") },
+              ]}
+            >
+              typeface design
+            </Text>
+            <Text
+              style={[
+                styles.creditName,
                 { color: colors.text, fontFamily: resolveFont("regular") },
               ]}
             >
-              redaction.us
+              Jeremy Mickel
             </Text>
-          </Pressable>
-        </View>
+
+            <Text
+              style={[
+                styles.creditRole,
+                { color: colors.textSecondary, fontFamily: resolveFont("regular") },
+              ]}
+            >
+              creative direction
+            </Text>
+            <Text
+              style={[
+                styles.creditName,
+                { color: colors.text, fontFamily: resolveFont("regular") },
+              ]}
+            >
+              Forest Young
+            </Text>
+
+            <Text
+              style={[
+                styles.creditRole,
+                { color: colors.textSecondary, fontFamily: resolveFont("regular") },
+              ]}
+            >
+              the redaction
+            </Text>
+            <View style={styles.redactionBlock}>
+              <Text
+                style={[
+                  styles.creditName,
+                  { color: colors.text, fontFamily: resolveFont("regular") },
+                ]}
+              >
+                Titus Kaphar
+              </Text>
+              <Text
+                style={[
+                  styles.creditName,
+                  { color: colors.text, fontFamily: resolveFont("regular") },
+                ]}
+              >
+                Reginald Dwayne Betts
+              </Text>
+              <Pressable
+                onPress={() => Linking.openURL("https://www.redaction.us/")}
+              >
+                <Text
+                  style={[
+                    styles.redactionLink,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  redaction.us
+                </Text>
+              </Pressable>
+            </View>
+          </>
+        )}
 
         <Text
           style={[
@@ -946,22 +878,6 @@ function Settings() {
               </Pressable>
               <Pressable
                 style={[styles.dialogButton, { backgroundColor: colors.text }]}
-                onPress={() => openExportSetup("csv")}
-              >
-                <Text
-                  style={[
-                    styles.dialogButtonText,
-                    {
-                      color: colors.background,
-                      fontFamily: resolveFont("bold"),
-                    },
-                  ]}
-                >
-                  Spreadsheet (CSV)
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.dialogButton, { backgroundColor: colors.text }]}
                 onPress={() => openExportSetup("txt")}
               >
                 <Text
@@ -976,19 +892,32 @@ function Settings() {
                   Text Summary (TXT)
                 </Text>
               </Pressable>
+              <Pressable
+                style={[styles.dialogButton, { backgroundColor: colors.text }]}
+                onPress={() => openExportSetup("csv")}
+              >
+                <Text
+                  style={[
+                    styles.dialogButtonText,
+                    {
+                      color: colors.background,
+                      fontFamily: resolveFont("bold"),
+                    },
+                  ]}
+                >
+                  Spreadsheet (CSV)
+                </Text>
+              </Pressable>
               {canExportTheme && (
                 <Pressable
-                  style={[
-                    styles.dialogButton,
-                    { backgroundColor: colors.backgroundElement },
-                  ]}
+                  style={[styles.dialogButton, { backgroundColor: colors.text }]}
                   onPress={() => openExportSetup("theme")}
                 >
                   <Text
                     style={[
                       styles.dialogButtonText,
                       {
-                        color: colors.text,
+                        color: colors.background,
                         fontFamily: resolveFont("bold"),
                       },
                     ]}
@@ -1043,17 +972,14 @@ function Settings() {
                 </Text>
               </Pressable>
               <Pressable
-                style={[
-                  styles.dialogButton,
-                  { backgroundColor: colors.backgroundElement },
-                ]}
+                style={[styles.dialogButton, { backgroundColor: colors.text }]}
                 onPress={handleImportAppLook}
               >
                 <Text
                   style={[
                     styles.dialogButtonText,
                     {
-                      color: colors.text,
+                      color: colors.background,
                       fontFamily: resolveFont("bold"),
                     },
                   ]}
@@ -1309,7 +1235,6 @@ function Settings() {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 20 }}
             >
-              {/* Typography */}
               <Text
                 style={[
                   styles.studioSectionHeader,
@@ -1318,19 +1243,48 @@ function Settings() {
               >
                 typography
               </Text>
-              <View style={styles.studioRow}>
-                <Text
-                  style={[
-                    styles.studioLabel,
-                    { color: colors.text, fontFamily: resolveFont("regular") },
-                  ]}
-                >
-                  font: {customFont?.name || "Redaction"}
-                </Text>
-                <View style={{ flexDirection: "row", gap: 6 }}>
+              <View
+                style={[
+                  styles.studioCard,
+                  {
+                    backgroundColor: colors.backgroundElement,
+                    borderColor: colors.textSecondary,
+                  },
+                ]}
+              >
+                <View style={styles.studioRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.studioLabel,
+                        { color: colors.text, fontFamily: resolveFont("bold") },
+                      ]}
+                    >
+                      {customFont?.name || "Redaction"}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        color: colors.textSecondary,
+                        fontFamily: resolveFont("italic"),
+                        marginTop: 2,
+                      }}
+                    >
+                      the quick brown fox jumps over the lazy dog
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
                   <Pressable
                     onPress={handlePickFont}
-                    style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
+                    style={[
+                      styles.studioSmallBtn,
+                      {
+                        backgroundColor: colors.text,
+                        flex: 1,
+                        alignItems: "center",
+                      },
+                    ]}
                   >
                     <Text
                       style={[
@@ -1341,7 +1295,7 @@ function Settings() {
                         },
                       ]}
                     >
-                      pick .ttf
+                      choose .ttf/.otf
                     </Text>
                   </Pressable>
                   {customFont && (
@@ -1349,7 +1303,11 @@ function Settings() {
                       onPress={handleResetFont}
                       style={[
                         styles.studioSmallBtn,
-                        { backgroundColor: colors.backgroundElement },
+                        {
+                          backgroundColor: colors.background,
+                          flex: 1,
+                          alignItems: "center",
+                        },
                       ]}
                     >
                       <Text
@@ -1361,14 +1319,13 @@ function Settings() {
                           },
                         ]}
                       >
-                        reset
+                        reset font
                       </Text>
                     </Pressable>
                   )}
                 </View>
               </View>
 
-              {/* Screen Wallpapers */}
               <Text
                 style={[
                   styles.studioSectionHeader,
@@ -1377,19 +1334,54 @@ function Settings() {
               >
                 wallpapers
               </Text>
-              <View style={styles.studioRow}>
-                <Text
-                  style={[
-                    styles.studioLabel,
-                    { color: colors.text, fontFamily: resolveFont("regular") },
-                  ]}
-                >
-                  calendar: {backgrounds.calendar ? "custom" : "none"}
-                </Text>
-                <View style={{ flexDirection: "row", gap: 6 }}>
+              <View
+                style={[
+                  styles.studioCard,
+                  {
+                    backgroundColor: colors.backgroundElement,
+                    borderColor: colors.textSecondary,
+                  },
+                ]}
+              >
+                <View style={styles.wallpaperPreviewRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.studioLabel,
+                        { color: colors.text, fontFamily: resolveFont("bold") },
+                      ]}
+                    >
+                      calendar wallpaper
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        fontFamily: resolveFont("italic"),
+                      }}
+                    >
+                      {backgrounds.calendar ? "custom image active" : "none"}
+                    </Text>
+                  </View>
+                  {backgrounds.calendar && (
+                    <Image
+                      source={{ uri: backgrounds.calendar }}
+                      style={styles.wallpaperThumb}
+                      contentFit="cover"
+                    />
+                  )}
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
                   <Pressable
                     onPress={() => handlePickBackground("calendar")}
-                    style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
+                    style={[
+                      styles.studioSmallBtn,
+                      {
+                        backgroundColor: colors.text,
+                        flex: 1,
+                        alignItems: "center",
+                      },
+                    ]}
                   >
                     <Text
                       style={[
@@ -1400,7 +1392,7 @@ function Settings() {
                         },
                       ]}
                     >
-                      pick
+                      {backgrounds.calendar ? "replace" : "choose photo"}
                     </Text>
                   </Pressable>
                   {backgrounds.calendar && (
@@ -1408,7 +1400,11 @@ function Settings() {
                       onPress={() => handleClearBackground("calendar")}
                       style={[
                         styles.studioSmallBtn,
-                        { backgroundColor: colors.backgroundElement },
+                        {
+                          backgroundColor: colors.background,
+                          flex: 1,
+                          alignItems: "center",
+                        },
                       ]}
                     >
                       <Text
@@ -1420,26 +1416,61 @@ function Settings() {
                           },
                         ]}
                       >
-                        clear
+                        remove
                       </Text>
                     </Pressable>
                   )}
                 </View>
               </View>
 
-              <View style={styles.studioRow}>
-                <Text
-                  style={[
-                    styles.studioLabel,
-                    { color: colors.text, fontFamily: resolveFont("regular") },
-                  ]}
-                >
-                  settings: {backgrounds.settings ? "custom" : "none"}
-                </Text>
-                <View style={{ flexDirection: "row", gap: 6 }}>
+              <View
+                style={[
+                  styles.studioCard,
+                  {
+                    backgroundColor: colors.backgroundElement,
+                    borderColor: colors.textSecondary,
+                  },
+                ]}
+              >
+                <View style={styles.wallpaperPreviewRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.studioLabel,
+                        { color: colors.text, fontFamily: resolveFont("bold") },
+                      ]}
+                    >
+                      settings wallpaper
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        fontFamily: resolveFont("italic"),
+                      }}
+                    >
+                      {backgrounds.settings ? "custom image active" : "none"}
+                    </Text>
+                  </View>
+                  {backgrounds.settings && (
+                    <Image
+                      source={{ uri: backgrounds.settings }}
+                      style={styles.wallpaperThumb}
+                      contentFit="cover"
+                    />
+                  )}
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
                   <Pressable
                     onPress={() => handlePickBackground("settings")}
-                    style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
+                    style={[
+                      styles.studioSmallBtn,
+                      {
+                        backgroundColor: colors.text,
+                        flex: 1,
+                        alignItems: "center",
+                      },
+                    ]}
                   >
                     <Text
                       style={[
@@ -1450,7 +1481,7 @@ function Settings() {
                         },
                       ]}
                     >
-                      pick
+                      {backgrounds.settings ? "replace" : "choose photo"}
                     </Text>
                   </Pressable>
                   {backgrounds.settings && (
@@ -1458,7 +1489,11 @@ function Settings() {
                       onPress={() => handleClearBackground("settings")}
                       style={[
                         styles.studioSmallBtn,
-                        { backgroundColor: colors.backgroundElement },
+                        {
+                          backgroundColor: colors.background,
+                          flex: 1,
+                          alignItems: "center",
+                        },
                       ]}
                     >
                       <Text
@@ -1470,14 +1505,13 @@ function Settings() {
                           },
                         ]}
                       >
-                        clear
+                        remove
                       </Text>
                     </Pressable>
                   )}
                 </View>
               </View>
 
-              {/* Color Customizer */}
               <Text
                 style={[
                   styles.studioSectionHeader,
@@ -1486,13 +1520,83 @@ function Settings() {
               >
                 color customization ({scheme} mode)
               </Text>
-              {renderColorField("background", "background")}
-              {renderColorField("text", "text")}
-              {renderColorField("element / card", "backgroundElement")}
-              {renderColorField("selected item", "backgroundSelected")}
-              {renderColorField("secondary text", "textSecondary")}
+              <View style={styles.colorTabRow}>
+                {(
+                  [
+                    { key: "background", label: "bg" },
+                    { key: "text", label: "text" },
+                    { key: "backgroundElement", label: "card" },
+                    { key: "backgroundSelected", label: "select" },
+                    { key: "textSecondary", label: "muted" },
+                  ] as const
+                ).map((tab) => {
+                  const isSelected = activeColorTab === tab.key;
+                  const tabColor = colors[tab.key] || "#FFFFFF";
+                  return (
+                    <Pressable
+                      key={tab.key}
+                      onPress={() => setActiveColorTab(tab.key)}
+                      style={[
+                        styles.colorTab,
+                        {
+                          backgroundColor: isSelected
+                            ? colors.text
+                            : colors.backgroundElement,
+                          borderColor: isSelected
+                            ? colors.text
+                            : colors.textSecondary,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: 6,
+                            backgroundColor: tabColor,
+                            borderWidth: 1,
+                            borderColor: isSelected
+                              ? colors.background
+                              : colors.textSecondary,
+                          }}
+                        />
+                        <Text
+                          style={[
+                            styles.colorTabText,
+                            {
+                              color: isSelected
+                                ? colors.background
+                                : colors.text,
+                              fontFamily: resolveFont(
+                                isSelected ? "bold" : "regular",
+                              ),
+                            },
+                          ]}
+                        >
+                          {tab.label}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
 
-              {/* Feature Toggles */}
+              <GoogleColorPicker
+                key={`${scheme}-${activeColorTab}`}
+                color={colors[activeColorTab] || "#FFFFFF"}
+                onChange={(hex) => updateColorOverride(scheme, activeColorTab, hex)}
+                textColor={colors.text}
+                borderColor={colors.textSecondary}
+                fontFamily={resolveFont("regular")}
+              />
+
               <Text
                 style={[
                   styles.studioSectionHeader,
@@ -1621,7 +1725,6 @@ function Settings() {
                 />
               </Pressable>
 
-              {/* Reset Button */}
               <View style={{ marginTop: 20 }}>
                 <Pressable
                   onPress={() => setResetConfirmVisible(true)}
@@ -1633,10 +1736,13 @@ function Settings() {
                   <Text
                     style={[
                       styles.dialogButtonText,
-                      { color: colors.text, fontFamily: resolveFont("bold") },
+                      {
+                        color: colors.text,
+                        fontFamily: resolveFont("bold"),
+                      },
                     ]}
                   >
-                    reset appearance to defaults
+                    Reset Appearance to Defaults
                   </Text>
                 </Pressable>
               </View>

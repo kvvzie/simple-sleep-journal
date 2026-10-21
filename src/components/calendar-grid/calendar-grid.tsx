@@ -66,7 +66,7 @@ function clampPage(p: number) {
 
 function CalendarGrid() {
   const scheme = useAppColorScheme();
-  const { colors, resolveFont } = useAppearance();
+  const { colors, resolveFont, backgrounds } = useAppearance();
   const { rows, columns } = useSettings();
   const totalCells = rows * columns;
 
@@ -349,7 +349,12 @@ function CalendarGrid() {
     activeSource === null || activeSource === key ? "auto" : "none";
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: backgrounds.calendar ? "transparent" : colors.background },
+      ]}
+    >
       <StatusBar style={scheme === "dark" ? "light" : "dark"} animated />
 
       <View style={styles.headerRow}>

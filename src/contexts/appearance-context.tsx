@@ -51,7 +51,7 @@ type AppearanceContextType = {
 };
 
 const AppearanceContext = createContext<AppearanceContextType | null>(null);
-const STORAGE_KEY = "sleepinapp.appearance_v1";
+const STORAGE_KEY = `sleepinapp.appearance_${buildConfig.mode}_v3`;
 
 export function AppearanceProvider({ children }: { children: React.ReactNode }) {
   const scheme = useAppColorScheme();
@@ -83,12 +83,21 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
             setFeatures((prev) => ({
               ...prev,
               ...parsed.features,
+              inAppCustomizationEnabled:
+                buildConfig.mode === "dynamic"
+                  ? (parsed.features.inAppCustomizationEnabled ?? true)
+                  : false,
             }));
           }
         } catch {}
-      } else if (buildConfig.mode === "baked") {
-        setTheme(buildConfig.bakedTheme);
-        setFeatures(buildConfig.features);
+      } else {
+        if (buildConfig.mode === "baked") {
+          setTheme(buildConfig.bakedTheme);
+          setFeatures(buildConfig.features);
+        } else {
+          setTheme(DEFAULT_THEME);
+          setFeatures(buildConfig.features);
+        }
       }
       setLoaded(true);
     });
@@ -109,6 +118,10 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     return {
       ...features,
       ...(theme.features || {}),
+      inAppCustomizationEnabled:
+        buildConfig.mode === "dynamic"
+          ? (features.inAppCustomizationEnabled ?? true)
+          : false,
     };
   }, [features, theme.features]);
 

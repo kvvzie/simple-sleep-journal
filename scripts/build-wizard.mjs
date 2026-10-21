@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline/promises";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,6 +54,22 @@ const PALETTES = {
       textSecondary: "#977CA8",
     },
   },
+  playful: {
+    dark: {
+      background: "#1E0538",
+      text: "#FFE600",
+      backgroundElement: "#6B1D99",
+      backgroundSelected: "#00FF99",
+      textSecondary: "#FF70C5",
+    },
+    light: {
+      background: "#FFF5FA",
+      text: "#5A009D",
+      backgroundElement: "#FFE0F0",
+      backgroundSelected: "#00E5FF",
+      textSecondary: "#FF1493",
+    },
+  },
 };
 
 function parseArgs() {
@@ -88,16 +105,36 @@ async function run() {
   let mode = args.mode || "dynamic";
   let appName = args.name || "";
   let packageId = args.packageId || "";
-  let colorSchemeToggleEnabled = args.colorSchemeToggle !== undefined ? args.colorSchemeToggle !== "false" : true;
-  let bodyCareEnabled = args.bodyCare !== undefined ? args.bodyCare !== "false" : true;
-  let moodStarsEnabled = args.moodStars !== undefined ? args.moodStars !== "false" : true;
-  let commentsEnabled = args.comments !== undefined ? args.comments !== "false" : true;
-  let gridPickerEnabled = args.gridPicker !== undefined ? args.gridPicker !== "false" : true;
-  let themeChoice = args.theme || "default";
+  let colorSchemeToggleEnabled =
+    args.colorSchemeToggle !== undefined
+      ? args.colorSchemeToggle !== "false"
+      : true;
+  let bodyCareEnabled =
+    args.bodyCare !== undefined
+      ? args.bodyCare !== "false"
+      : mode === "baked"
+        ? false
+        : true;
+  let moodStarsEnabled =
+    args.moodStars !== undefined ? args.moodStars !== "false" : true;
+  let commentsEnabled =
+    args.comments !== undefined ? args.comments !== "false" : true;
+  let gridPickerEnabled =
+    args.gridPicker !== undefined ? args.gridPicker !== "false" : true;
+  let themeChoice = args.theme || (mode === "baked" ? "playful" : "default");
   let fontPath = args.font || null;
-  let fontNameChoice = args.fontName || null;
-  let calendarBgPath = args.calendarBg || null;
-  let settingsBgPath = args.settingsBg || null;
+  let fontNameChoice =
+    args.fontName || (mode === "baked" ? "ComicSans" : null);
+  let calendarBgPath =
+    args.calendarBg ||
+    (mode === "baked"
+      ? path.join(ROOT_DIR, "assets/images/custom-cat-bg.png")
+      : null);
+  let settingsBgPath =
+    args.settingsBg ||
+    (mode === "baked"
+      ? path.join(ROOT_DIR, "assets/images/custom-cat-bg.png")
+      : null);
 
   if (isInteractive) {
     const rl = readline.createInterface({
@@ -283,8 +320,52 @@ async function run() {
     if (rawApp.expo.ios) {
       rawApp.expo.ios.bundleIdentifier = packageId;
     }
+    if (mode === "baked") {
+      rawApp.expo.icon = "./assets/images/icon-cat.png";
+    } else {
+      rawApp.expo.icon = "./assets/images/icon.png";
+    }
     fs.writeFileSync(APP_JSON_PATH, JSON.stringify(rawApp, null, 2));
     console.log(`[build-wizard] Updated ${APP_JSON_PATH}`);
+
+    try {
+      if (mode === "baked") {
+        const catIconPath = path.join(ROOT_DIR, "assets/images/icon-cat.png");
+        if (fs.existsSync(catIconPath)) {
+          const SIZES = [
+            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-mdpi"), size: 48 },
+            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-hdpi"), size: 72 },
+            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xhdpi"), size: 96 },
+            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xxhdpi"), size: 144 },
+            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xxxhdpi"), size: 192 },
+          ];
+          for (const item of SIZES) {
+            if (fs.existsSync(item.dir)) {
+              execSync(
+                `ffmpeg -y -i "${catIconPath}" -vf "scale=${item.size}:${item.size}" "${path.join(item.dir, "ic_launcher.webp")}" 2>/dev/null`,
+              );
+              execSync(
+                `ffmpeg -y -i "${catIconPath}" -vf "scale=${item.size}:${item.size}" "${path.join(item.dir, "ic_launcher_round.webp")}" 2>/dev/null`,
+              );
+            }
+          }
+          console.log("[build-wizard] Updated Android launcher mipmap icons with cat icon");
+        }
+      } else {
+        const backupDir = path.join(ROOT_DIR, "android/app/src/main/res-vanilla-backup");
+        if (fs.existsSync(backupDir)) {
+          const entries = fs.readdirSync(backupDir);
+          for (const entry of entries) {
+            const src = path.join(backupDir, entry);
+            const dest = path.join(ROOT_DIR, "android/app/src/main/res", entry);
+            if (fs.existsSync(src) && fs.existsSync(dest)) {
+              fs.cpSync(src, dest, { recursive: true });
+            }
+          }
+          console.log("[build-wizard] Restored vanilla Android launcher mipmap icons");
+        }
+      }
+    } catch {}
   }
 
   if (fs.existsSync(STRINGS_XML_PATH)) {

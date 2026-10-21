@@ -19,6 +19,13 @@ export const styles = StyleSheet.create({
     marginTop: 16,
   },
   title: { fontSize: 48 },
+  topLeftFloatingButton: {
+    position: "absolute",
+    top: 24,
+    left: 20,
+    zIndex: 99,
+    padding: 8,
+  },
   wandButton: {
     position: "absolute",
     right: 28,
@@ -158,11 +165,39 @@ export const styles = StyleSheet.create({
   studioSmallBtnText: {
     fontSize: 13,
   },
-  colorFieldRow: {
+  studioCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  colorTabRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 12,
+  },
+  colorTab: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  colorTabText: {
+    fontSize: 12,
+  },
+  wallpaperPreviewRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
+  },
+  wallpaperThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   colorSwatch: {
     width: 26,

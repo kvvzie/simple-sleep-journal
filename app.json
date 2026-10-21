@@ -4,7 +4,7 @@
     "slug": "sleepinapp",
     "version": "1.1.2",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon-cat.png",
     "scheme": "comshittyassappssleepinappbaked",
     "userInterfaceStyle": "automatic",
     "ios": {
