@@ -152,7 +152,6 @@ export async function initDB() {
       ON sleep_log_edits(log_date);
     `);
 
-    // Prevents duplicate edit rows when the same backup is imported twice.
     await db.execAsync(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_sleep_log_edits_unique
       ON sleep_log_edits(log_date, edit_index);
@@ -175,7 +174,6 @@ export async function saveSleepLog(
     );
 
     if (!existing) {
-      // First time this date is logged — no history entry yet.
       await db.runAsync(
         `INSERT INTO sleep_logs (date, hours, mood, comment, logged, logged_at, updated_at)
          VALUES (?, ?, ?, ?, 1, ?, ?)`,
@@ -189,7 +187,6 @@ export async function saveSleepLog(
     const changedComment = existing.comment !== comment;
 
     if (!changedHours && !changedMood && !changedComment) {
-      // Nothing actually changed — don't touch updated_at, don't log history.
       return;
     }
 
@@ -474,9 +471,6 @@ export async function importBackup(
         ],
       );
 
-      // Wipe existing history for this date — the backup is now the
-      // single source of truth, so any interim edits made after the
-      // backup was created must be discarded, not merged.
       await db.runAsync("DELETE FROM sleep_log_edits WHERE log_date = ?", [
         log.date,
       ]);

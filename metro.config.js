@@ -4,8 +4,6 @@ const config = getDefaultConfig(__dirname);
 
 config.resolver.assetExts.push("wasm");
 
-// Wymagane przez wa-sqlite na web — endpointy Cross-Origin-Opener/Embedder-Policy
-// muszą być ustawione, żeby SharedArrayBuffer działał w przeglądarce.
 config.server = {
   ...config.server,
   enhanceMiddleware: (middleware) => {

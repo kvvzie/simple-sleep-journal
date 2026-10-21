@@ -32,7 +32,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import WheelPicker, { WheelPickerHandle } from "../wheel-picker/wheel-picker";
+import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
 import { styles } from "./settings.styles";
 
 const MAX_STEP = GRID_STEPS.length - 1;
@@ -59,7 +59,6 @@ function Settings() {
   const columnsRef = useRef<WheelPickerHandle>(null);
   const gridLockRef = useRef<string | null>(null);
 
-  // Dialog States
   const [exportDialogVisible, setExportDialogVisible] = useState(false);
   const [exportType, setExportType] = useState<"json" | "txt" | "csv" | null>(
     null,
@@ -410,7 +409,6 @@ function Settings() {
       const parsed = JSON.parse(content);
 
       if (Array.isArray(parsed)) {
-        // Legacy flat-array backup — no history data, don't touch edits.
         await importLogs(parsed);
       } else if (parsed && Array.isArray(parsed.logs)) {
         const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
@@ -926,7 +924,6 @@ function Settings() {
         </Pressable>
       </Modal>
 
-      {/* CUSTOM INFO DIALOG */}
       <Modal
         visible={infoDialog.visible}
         transparent

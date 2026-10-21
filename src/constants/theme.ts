@@ -8,12 +8,11 @@ export const Colors = {
     backgroundElement: "#F0F0F3",
     backgroundSelected: "#E0E1E6",
     textSecondary: "#60646C",
-    // Kalendarz — dostosuj tutaj
-    calendarDayLogged: "#000000", // dzień z zapisanym snem — pełny kolor
-    calendarDayUnlogged: "#8A8A8E", // dzień przeszły bez zapisu — średni szary
-    calendarDayFuture: "#B8B8BC", // dzień przyszły — jasniejszy szary, italic
-    calendarDayOtherMonth: "#D8D8DC", // dni z innego miesiąca — najjaśniejszy
-    calendarToday: "#000000", // dzisiejszy dzień — pełny + bold
+    calendarDayLogged: "#000000",
+    calendarDayUnlogged: "#8A8A8E",
+    calendarDayFuture: "#B8B8BC",
+    calendarDayOtherMonth: "#D8D8DC",
+    calendarToday: "#000000",
     modalBackground: "#ffffff",
     modalOverlay: "rgba(0,0,0,0.4)",
   },
@@ -23,11 +22,10 @@ export const Colors = {
     backgroundElement: "#212225",
     backgroundSelected: "#2E3135",
     textSecondary: "#B0B4BA",
-    // Kalendarz — dostosuj tutaj (poprawione, żeby było widać w dark mode)
-    calendarDayLogged: "#ffffff", // dzień z zapisanym snem — pełny biały
-    calendarDayUnlogged: "#75757A", // dzień przeszły bez zapisu — wyraźny szary
-    calendarDayFuture: "#4A4A4F", // dzień przyszły — ciemniejszy, ale widoczny
-    calendarDayOtherMonth: "#38383D", // dni z innego miesiąca — najciemniejszy widoczny
+    calendarDayLogged: "#ffffff",
+    calendarDayUnlogged: "#75757A",
+    calendarDayFuture: "#4A4A4F",
+    calendarDayOtherMonth: "#38383D",
     calendarToday: "#ffffff",
     modalBackground: "#1C1C1E",
     modalOverlay: "rgba(0,0,0,0.6)",

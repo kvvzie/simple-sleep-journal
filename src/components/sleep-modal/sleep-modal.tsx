@@ -31,8 +31,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import ConfirmDialog from "../confirm-dialog/confirm-dialog";
-import WheelPicker, { WheelPickerHandle } from "../wheel-picker/wheel-picker";
+import ConfirmDialog from "../confirm-dialog";
+import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
 import { styles } from "./sleep-modal.styles";
 
 type Props = {
@@ -624,7 +624,6 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
 
     setSelectedBodyCareProductId(productId);
 
-    // Intentionally stays open after choosing an option.
     if (changingProduct) {
       setBodyCareAmounts({});
       setBodyCareSelectedZones({});
@@ -689,7 +688,6 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
 
       setBodyCareSelectedZones(nextSelectedZones);
 
-      // Makes saving correct even if the user closes immediately.
       stateRef.current.bodyCareSelectedZones = nextSelectedZones;
 
       Animated.timing(bodyCareOverlayOpacity[zone], {
@@ -709,7 +707,6 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
 
     setBodyCareSelectedZones(nextSelectedZones);
 
-    // Makes saving correct even if the user closes immediately.
     stateRef.current.bodyCareSelectedZones = nextSelectedZones;
 
     setBodyCareAmounts((previous) => ({

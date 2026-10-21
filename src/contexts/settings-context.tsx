@@ -1,17 +1,10 @@
+import { GridSize, GRID_STEPS } from "@/constants/grid";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useWindowDimensions } from "react-native";
 
 export type ColorSchemePref = "light" | "automatic" | "dark";
-export type GridSize = { rows: number; columns: number };
-
-export const GRID_STEPS: GridSize[] = [
-  { rows: 4, columns: 8 },
-  { rows: 5, columns: 7 },
-  { rows: 6, columns: 6 },
-  { rows: 7, columns: 5 },
-  { rows: 8, columns: 4 },
-];
+export { GridSize, GRID_STEPS };
 
 type SettingsState = {
   stepIndex: number;
@@ -30,8 +23,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { width } = useWindowDimensions();
   const isWideScreen = width > 500;
 
-  const [stepIndexNarrow, setStepIndexNarrow] = useState(3); // 7x5 dla małych
-  const [stepIndexWide, setStepIndexWide] = useState(1); // 4x8 dla dużych ekranów!
+  const [stepIndexNarrow, setStepIndexNarrow] = useState(3);
+  const [stepIndexWide, setStepIndexWide] = useState(1);
   const [colorSchemePref, setColorSchemePrefState] =
     useState<ColorSchemePref>("automatic");
   const [loaded, setLoaded] = useState(false);
@@ -45,7 +38,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             setStepIndexNarrow(parsed.stepIndexNarrow);
           if (typeof parsed.stepIndexWide === "number")
             setStepIndexWide(parsed.stepIndexWide);
-          // Fallback dla starszych zapisów:
           if (
             typeof parsed.stepIndex === "number" &&
             typeof parsed.stepIndexNarrow !== "number"
@@ -69,7 +61,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     );
   }, [stepIndexNarrow, stepIndexWide, colorSchemePref, loaded]);
 
-  // Wyciągamy to ustawienie, które pasuje do aktualnego ekranu
   const stepIndex = isWideScreen ? stepIndexWide : stepIndexNarrow;
 
   const setStepIndex = (index: number) => {

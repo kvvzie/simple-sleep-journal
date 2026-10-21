@@ -1,0 +1,75 @@
+import assert from "node:assert";
+import test from "node:test";
+
+const csvEscape = (v: unknown) => {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+};
+
+function pageToHour(page: number, hoursCenter = 30, maxHours = 24) {
+  const diff = page - hoursCenter;
+  return ((diff % (maxHours + 1)) + (maxHours + 1)) % (maxHours + 1);
+}
+
+function pageToYearMonth(
+  page: number,
+  baseYear: number,
+  baseMonth: number,
+  centerPage = 60,
+) {
+  const diff = page - centerPage;
+  const total = baseYear * 12 + baseMonth + diff;
+  const year = Math.floor(total / 12);
+  const month = ((total % 12) + 12) % 12;
+  return { year, month };
+}
+
+test("csvEscape handles special characters and escaping", () => {
+  assert.strictEqual(csvEscape(null), "");
+  assert.strictEqual(csvEscape(undefined), "");
+  assert.strictEqual(csvEscape("simple text"), "simple text");
+  assert.strictEqual(csvEscape(42), "42");
+  assert.strictEqual(
+    csvEscape('contains "quotes"'),
+    '"contains ""quotes"""',
+  );
+  assert.strictEqual(
+    csvEscape("contains, comma"),
+    '"contains, comma"',
+  );
+  assert.strictEqual(
+    csvEscape("multi\nline"),
+    '"multi\nline"',
+  );
+});
+
+test("pageToHour maps pager index to 0..24 range cyclically", () => {
+  assert.strictEqual(pageToHour(30), 0); // Center is 0 hours
+  assert.strictEqual(pageToHour(38), 8); // +8 pages
+  assert.strictEqual(pageToHour(54), 24); // +24 pages
+  assert.strictEqual(pageToHour(55), 0); // wraps around to 0
+  assert.strictEqual(pageToHour(29), 24); // -1 page wraps to 24
+});
+
+test("pageToYearMonth computes correct month and year offsets", () => {
+  const baseYear = 2026;
+  const baseMonth = 9; // October (0-indexed: 9)
+
+  // Current page
+  const current = pageToYearMonth(60, baseYear, baseMonth);
+  assert.deepStrictEqual(current, { year: 2026, month: 9 });
+
+  // Next month
+  const nextMonth = pageToYearMonth(61, baseYear, baseMonth);
+  assert.deepStrictEqual(nextMonth, { year: 2026, month: 10 }); // November
+
+  // +3 months -> January 2027
+  const jan2027 = pageToYearMonth(63, baseYear, baseMonth);
+  assert.deepStrictEqual(jan2027, { year: 2027, month: 0 });
+
+  // -10 months -> December 2025
+  const dec2025 = pageToYearMonth(50, baseYear, baseMonth);
+  assert.deepStrictEqual(dec2025, { year: 2025, month: 11 });
+});

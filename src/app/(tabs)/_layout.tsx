@@ -1,6 +1,6 @@
-import CalendarGrid from "@/components/calendar-grid/calendar-grid";
-import NavBar from "@/components/nav-bar/nav-bar";
-import Settings from "@/components/settings/settings";
+import CalendarGrid from "@/components/calendar-grid";
+import NavBar from "@/components/nav-bar";
+import Settings from "@/components/settings";
 import { Colors } from "@/constants/theme";
 import { useNavDirection } from "@/contexts/nav-direction-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
