@@ -1,18 +1,22 @@
 import CalendarGrid from "@/components/calendar-grid";
 import NavBar from "@/components/nav-bar";
 import Settings from "@/components/settings";
-import { Colors } from "@/constants/theme";
+import { useAppearance } from "@/contexts/appearance-context";
 import { useNavDirection } from "@/contexts/nav-direction-context";
-import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import { useEffect, useRef } from "react";
-import { Animated, useWindowDimensions, View } from "react-native";
+import {
+  Animated,
+  ImageBackground,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 export default function TabsLayout() {
   const { screen } = useNavDirection();
   const { width } = useWindowDimensions();
   const translateX = useRef(new Animated.Value(0)).current;
-  const scheme = useAppColorScheme();
-  const colors = Colors[scheme];
+  const { colors, backgrounds } = useAppearance();
 
   useEffect(() => {
     Animated.spring(translateX, {
@@ -41,11 +45,44 @@ export default function TabsLayout() {
           transform: [{ translateX }],
         }}
       >
-        <View style={{ width, backgroundColor: colors.background }}>
-          <CalendarGrid />
+        <View style={{ width, height: "100%", backgroundColor: colors.background }}>
+          {backgrounds.calendar ? (
+            <ImageBackground
+              source={{ uri: backgrounds.calendar }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+            >
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: colors.background, opacity: 0.65 },
+                ]}
+              />
+              <CalendarGrid />
+            </ImageBackground>
+          ) : (
+            <CalendarGrid />
+          )}
         </View>
-        <View style={{ width, backgroundColor: colors.background }}>
-          <Settings />
+
+        <View style={{ width, height: "100%", backgroundColor: colors.background }}>
+          {backgrounds.settings ? (
+            <ImageBackground
+              source={{ uri: backgrounds.settings }}
+              style={{ width: "100%", height: "100%" }}
+              resizeMode="cover"
+            >
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: colors.background, opacity: 0.65 },
+                ]}
+              />
+              <Settings />
+            </ImageBackground>
+          ) : (
+            <Settings />
+          )}
         </View>
       </Animated.View>
       <NavBar />

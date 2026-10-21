@@ -1,4 +1,4 @@
-import { Colors } from "@/constants/theme";
+import { useAppearance } from "@/contexts/appearance-context";
 import { useSettings } from "@/contexts/settings-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import { getMonthLogs, initDB } from "@/lib/db";
@@ -66,7 +66,7 @@ function clampPage(p: number) {
 
 function CalendarGrid() {
   const scheme = useAppColorScheme();
-  const colors = Colors[scheme];
+  const { colors, resolveFont } = useAppearance();
   const { rows, columns } = useSettings();
   const totalCells = rows * columns;
 
@@ -402,7 +402,10 @@ function CalendarGrid() {
                   return (
                     <View key={p} style={styles.yearPage}>
                       <Text
-                        style={[styles.year, { color: colors.text }]}
+                        style={[
+                          styles.year,
+                          { color: colors.text, fontFamily: resolveFont("display") },
+                        ]}
                         onLayout={(e) => {
                           const w = e.nativeEvent.layout.width;
                           yearWidthMap.current[py] = w;
@@ -489,7 +492,10 @@ function CalendarGrid() {
                   return (
                     <View key={p} style={styles.monthPage}>
                       <Text
-                        style={[styles.month, { color: colors.text }]}
+                        style={[
+                          styles.month,
+                          { color: colors.text, fontFamily: resolveFont("title") },
+                        ]}
                         onLayout={(e) => {
                           const w = e.nativeEvent.layout.width;
                           monthWidthMap.current[pm] = w;
@@ -579,7 +585,13 @@ function CalendarGrid() {
                       style={[
                         styles.dayText,
                         {
-                          fontFamily: getDayFont(d.type),
+                          fontFamily: resolveFont(
+                            d.type === "today"
+                              ? "bold"
+                              : d.type === "logged"
+                                ? "regular"
+                                : "italic",
+                          ),
                           color: getDayColor(d.type, colors),
                           fontSize: getDayFontSize(columns),
                         },

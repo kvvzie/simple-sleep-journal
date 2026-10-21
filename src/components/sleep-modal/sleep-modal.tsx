@@ -1,4 +1,4 @@
-import { Colors } from "@/constants/theme";
+import { useAppearance } from "@/contexts/appearance-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import {
   BodyCareAmounts,
@@ -123,7 +123,7 @@ function formatTimestamp(iso: string) {
 
 export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   const scheme = useAppColorScheme();
-  const colors = Colors[scheme];
+  const { colors, features, resolveFont } = useAppearance();
 
   const [hours, setHours] = useState<number | null>(null);
   const [mood, setMood] = useState(0);
@@ -382,20 +382,30 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     if (!s.date || !s.dirty) return;
 
     const hasNormalLogData =
-      s.hours > 0 || s.mood > 0 || s.comment.trim().length > 0;
+      s.hours > 0 ||
+      (features.moodStarsEnabled && s.mood > 0) ||
+      (features.commentsEnabled && s.comment.trim().length > 0);
 
-    const hasBodyCareData = s.bodyCareEnabled && s.bodyCareProductId !== null;
+    const hasBodyCareData =
+      features.bodyCareEnabled && s.bodyCareEnabled && s.bodyCareProductId !== null;
 
     if (hasNormalLogData || hasBodyCareData) {
-      saveSleepLog(s.date, s.hours, s.mood, s.comment);
+      saveSleepLog(
+        s.date,
+        s.hours,
+        features.moodStarsEnabled ? s.mood : 0,
+        features.commentsEnabled ? s.comment : "",
+      );
     }
 
-    saveBodyCareLog(
-      s.date,
-      s.bodyCareEnabled,
-      s.bodyCareProductId,
-      getSelectedBodyCareAmounts(s.bodyCareAmounts, s.bodyCareSelectedZones),
-    );
+    if (features.bodyCareEnabled) {
+      saveBodyCareLog(
+        s.date,
+        s.bodyCareEnabled,
+        s.bodyCareProductId,
+        getSelectedBodyCareAmounts(s.bodyCareAmounts, s.bodyCareSelectedZones),
+      );
+    }
   };
 
   const onHoursSelected = (page: number) => {
@@ -748,7 +758,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
         color: colors.text,
         borderColor: colors.textSecondary,
         backgroundColor: colors.modalBackground,
-        fontFamily: "Redaction20-Regular",
+        fontFamily: resolveFont("regular"),
       },
     ];
   };
@@ -795,7 +805,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
               <Text
                 style={[
                   styles.title,
-                  { color: colors.text, fontFamily: "Redaction35-Bold" },
+                  { color: colors.text, fontFamily: resolveFont("bold") },
                 ]}
               >
                 {date}
@@ -806,7 +816,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                   styles.label,
                   {
                     color: colors.textSecondary,
-                    fontFamily: "Redaction20-Italic",
+                    fontFamily: resolveFont("italic"),
                   },
                 ]}
               >
@@ -827,41 +837,46 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                   pageStyle={styles.hoursPage}
                   labelStyle={[
                     styles.hoursValueCenter,
-                    { color: colors.text, fontFamily: "Redaction20-Bold" },
+                    { color: colors.text, fontFamily: resolveFont("bold") },
                   ]}
                 />
               )}
 
-              <Text
-                style={[
-                  styles.label,
-                  {
-                    color: colors.textSecondary,
-                    fontFamily: "Redaction20-Italic",
-                  },
-                ]}
-              >
-                mood rating
-              </Text>
+              {features.moodStarsEnabled && (
+                <>
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        color: colors.textSecondary,
+                        fontFamily: resolveFont("italic"),
+                      },
+                    ]}
+                  >
+                    mood rating
+                  </Text>
 
-              <View
-                ref={starsRowRef}
-                style={styles.starsRow}
-                onLayout={measureStarsRow}
-                {...starsPan.panHandlers}
-              >
-                {Array.from({ length: 10 }).map((_, i) => (
-                  <Ionicons
-                    key={i}
-                    name={i < mood ? "star" : "star-outline"}
-                    size={STAR_SIZE}
-                    color={colors.text}
-                    style={{ marginRight: i < 9 ? STAR_GAP : 0 }}
-                  />
-                ))}
-              </View>
+                  <View
+                    ref={starsRowRef}
+                    style={styles.starsRow}
+                    onLayout={measureStarsRow}
+                    {...starsPan.panHandlers}
+                  >
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <Ionicons
+                        key={i}
+                        name={i < mood ? "star" : "star-outline"}
+                        size={STAR_SIZE}
+                        color={colors.text}
+                        style={{ marginRight: i < 9 ? STAR_GAP : 0 }}
+                      />
+                    ))}
+                  </View>
+                </>
+              )}
 
-              <View style={styles.bodyCareSection}>
+              {features.bodyCareEnabled && (
+                <View style={styles.bodyCareSection}>
                 <View style={styles.bodyCareHeader}>
                   <View style={styles.bodyCareControls}>
                     <View
@@ -894,9 +909,9 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                           styles.bodyCareRadioText,
                           {
                             color: colors.text,
-                            fontFamily: bodyCareEnabled
-                              ? "Redaction20-Bold"
-                              : "Redaction20-Regular",
+                            fontFamily: resolveFont(
+                              bodyCareEnabled ? "bold" : "regular",
+                            ),
                           },
                         ]}
                       >
@@ -949,7 +964,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                           styles.bodyCareLabel,
                           {
                             color: colors.textSecondary,
-                            fontFamily: "Redaction20-Italic",
+                            fontFamily: resolveFont("italic"),
                           },
                         ]}
                       >
@@ -977,7 +992,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                             styles.bodyCareProductToggleText,
                             {
                               color: colors.text,
-                              fontFamily: "Redaction20-Regular",
+                              fontFamily: resolveFont("regular"),
                             },
                           ]}
                         >
@@ -1026,9 +1041,9 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                                     styles.bodyCareProductOptionText,
                                     {
                                       color: colors.text,
-                                      fontFamily: isSelected
-                                        ? "Redaction20-Bold"
-                                        : "Redaction20-Regular",
+                                      fontFamily: resolveFont(
+                                        isSelected ? "bold" : "regular",
+                                      ),
                                     },
                                   ]}
                                 >
@@ -1055,7 +1070,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                               styles.bodyCareHint,
                               {
                                 color: colors.textSecondary,
-                                fontFamily: "Redaction20-Italic",
+                                fontFamily: resolveFont("italic"),
                               },
                             ]}
                           >
@@ -1159,45 +1174,50 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                   </Animated.View>
                 )}
               </View>
+            )}
 
-              <Text
-                style={[
-                  styles.label,
-                  {
-                    color: colors.textSecondary,
-                    fontFamily: "Redaction20-Italic",
-                  },
-                ]}
-              >
-                comment
-              </Text>
+              {features.commentsEnabled && (
+                <>
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        color: colors.textSecondary,
+                        fontFamily: resolveFont("italic"),
+                      },
+                    ]}
+                  >
+                    comment
+                  </Text>
 
-              <View
-                style={[
-                  styles.commentBox,
-                  { borderColor: colors.textSecondary },
-                ]}
-              >
-                <TextInput
-                  value={comment}
-                  onChangeText={(t) => {
-                    setComment(t);
-                    stateRef.current.dirty = true;
-                  }}
-                  multiline
-                  placeholder="text will be here"
-                  placeholderTextColor={colors.textSecondary}
-                  style={[
-                    styles.commentInput,
-                    {
-                      color: colors.text,
-                      fontFamily: comment
-                        ? "Redaction20-Regular"
-                        : "Redaction20-Italic",
-                    },
-                  ]}
-                />
-              </View>
+                  <View
+                    style={[
+                      styles.commentBox,
+                      { borderColor: colors.textSecondary },
+                    ]}
+                  >
+                    <TextInput
+                      value={comment}
+                      onChangeText={(t) => {
+                        setComment(t);
+                        stateRef.current.dirty = true;
+                      }}
+                      multiline
+                      placeholder="text will be here"
+                      placeholderTextColor={colors.textSecondary}
+                      style={[
+                        styles.commentInput,
+                        {
+                          color: colors.text,
+                          fontFamily: resolveFont(
+                            comment ? "regular" : "italic",
+                          ),
+                        },
+                      ]}
+                    />
+                  </View>
+                </>
+              )}
 
               {hasEntry && (
                 <TouchableOpacity
@@ -1210,7 +1230,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                       styles.historyFooterText,
                       {
                         color: colors.textSecondary,
-                        fontFamily: "Redaction20-Italic",
+                        fontFamily: resolveFont("italic"),
                       },
                     ]}
                   >
@@ -1245,7 +1265,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                                 styles.historyItem,
                                 {
                                   color: colors.textSecondary,
-                                  fontFamily: "Redaction20-Regular",
+                                  fontFamily: resolveFont("regular"),
                                 },
                               ]}
                             >

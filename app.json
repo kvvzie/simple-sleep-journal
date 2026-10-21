@@ -1,17 +1,18 @@
 {
   "expo": {
-    "name": "mood journal",
+    "name": "mood journal (baked)",
     "slug": "sleepinapp",
     "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "sleepinapp",
+    "scheme": "comshittyassappssleepinappbaked",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.shittyassapps.sleepinapp.baked"
     },
     "android": {
-      "package": "com.shittyassapps.sleepinapp",
+      "package": "com.shittyassapps.sleepinapp.baked",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",

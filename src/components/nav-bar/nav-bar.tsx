@@ -1,14 +1,12 @@
-import { Colors } from "@/constants/theme";
+import { useAppearance } from "@/contexts/appearance-context";
 import { useNavDirection } from "@/contexts/nav-direction-context";
-import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef } from "react";
 import { Animated, PanResponder, Pressable, View } from "react-native";
 import { styles } from "./nav-bar.styles";
 
 export default function NavBar() {
-  const scheme = useAppColorScheme();
-  const colors = Colors[scheme];
+  const { colors } = useAppearance();
   const { screen, setScreen } = useNavDirection();
 
   const activeIndex = screen === "settings" ? 1 : 0;

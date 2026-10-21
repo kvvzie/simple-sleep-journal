@@ -1,8 +1,6 @@
-import { Colors } from "@/constants/theme";
+import { useAppearance } from "@/contexts/appearance-context";
 import { Modal, Pressable, Text, View } from "react-native";
 import { styles } from "./confirm-dialog.styles";
-
-import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 
 type Props = {
   visible: boolean;
@@ -17,8 +15,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
-  const scheme = useAppColorScheme();
-  const colors = Colors[scheme];
+  const { colors, resolveFont } = useAppearance();
 
   return (
     <Modal
@@ -32,7 +29,7 @@ export default function ConfirmDialog({
           <Text
             style={[
               styles.message,
-              { color: colors.text, fontFamily: "Redaction20-Regular" },
+              { color: colors.text, fontFamily: resolveFont("regular") },
             ]}
           >
             {message}
@@ -45,7 +42,12 @@ export default function ConfirmDialog({
               ]}
               onPress={onCancel}
             >
-              <Text style={[styles.buttonText, { color: colors.text }]}>
+              <Text
+                style={[
+                  styles.buttonText,
+                  { color: colors.text, fontFamily: resolveFont("bold") },
+                ]}
+              >
                 no
               </Text>
             </Pressable>
@@ -53,7 +55,12 @@ export default function ConfirmDialog({
               style={[styles.button, { backgroundColor: colors.text }]}
               onPress={onConfirm}
             >
-              <Text style={[styles.buttonText, { color: colors.background }]}>
+              <Text
+                style={[
+                  styles.buttonText,
+                  { color: colors.background, fontFamily: resolveFont("bold") },
+                ]}
+              >
                 yes
               </Text>
             </Pressable>

@@ -96,4 +96,60 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 2,
     marginBottom: 10,
   },
+  studioCard: {
+    width: 290,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderStyle: "dashed",
+  },
+  studioSubheading: {
+    fontSize: 14,
+    marginBottom: 10,
+    marginTop: 6,
+    textTransform: "lowercase",
+  },
+  studioItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  studioItemLabel: {
+    fontSize: 15,
+  },
+  studioSmallBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  studioSmallBtnText: {
+    fontSize: 13,
+  },
+  palettePillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 14,
+  },
+  palettePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  palettePillText: {
+    fontSize: 13,
+  },
+  gridLockedBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  gridLockedText: {
+    fontSize: 18,
+  },
 });

@@ -1,4 +1,4 @@
-import { Colors } from "@/constants/theme";
+import { AppearanceProvider, useAppearance } from "@/contexts/appearance-context";
 import { NavDirectionProvider } from "@/contexts/nav-direction-context";
 import { SettingsProvider } from "@/contexts/settings-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
@@ -11,8 +11,8 @@ import { Animated, Easing, View } from "react-native";
 SplashScreen.preventAutoHideAsync();
 
 function ThemedRoot() {
+  const { colors } = useAppearance();
   const scheme = useAppColorScheme();
-  const colors = Colors[scheme];
   const opacity = useRef(new Animated.Value(1)).current;
   const prevScheme = useRef(scheme);
 
@@ -58,11 +58,13 @@ export default function Layout() {
 
   return (
     <SettingsProvider>
-      <NavDirectionProvider>
-        <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-          <ThemedRoot />
-        </View>
-      </NavDirectionProvider>
+      <AppearanceProvider>
+        <NavDirectionProvider>
+          <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+            <ThemedRoot />
+          </View>
+        </NavDirectionProvider>
+      </AppearanceProvider>
     </SettingsProvider>
   );
 }
