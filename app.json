@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "sleepinapp",
+    "name": "mood journal",
     "slug": "sleepinapp",
-    "version": "1.0.0",
+    "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "sleepinapp",
@@ -11,8 +11,10 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.shittyassapps.sleepinapp",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -28,15 +30,28 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FFFFFF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-font",
+      "expo-sqlite",
+      "expo-sharing",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "335d449a-1d0e-418c-a6d5-a332a13b67b1"
+      }
+    },
+    "owner": "shittyassapps"
   }
 }
