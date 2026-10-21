@@ -367,6 +367,8 @@ function Settings() {
 
       if (result.success) {
         showInfo(`File saved successfully as ${finalFileName}.`);
+      } else if (!result.canceled) {
+        showInfo("Failed to export your data file.");
       }
 
       setExportType(null);

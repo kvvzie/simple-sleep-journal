@@ -1,8 +1,8 @@
 import { File, Paths } from "expo-file-system";
 import { EncodingType, StorageAccessFramework } from "expo-file-system/legacy";
-import * as IntentLauncher from "expo-intent-launcher";
 import * as Sharing from "expo-sharing";
-import { Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform, TurboModuleRegistry } from "react-native";
 
 export type SaveFileOptions = {
   fileName: string;
@@ -14,21 +14,24 @@ export type SaveFileResult = {
   success: boolean;
   canceled?: boolean;
   uri?: string;
+  method?: "native-picker" | "saf-remembered" | "saf-picker" | "sharing";
 };
 
-export function extractUriFromIntentData(raw: string): string {
-  if (raw.startsWith("content://") || raw.startsWith("file://")) {
-    return raw;
+export const SAVED_EXPORT_DIR_KEY = "@export_directory_uri";
+
+export function isNativeDocumentPickerAvailable(): boolean {
+  if (Platform.OS === "android") {
+    return TurboModuleRegistry.get("RNDocumentPicker") != null;
   }
-  const match = raw.match(/dat=([^\s}]+)/);
-  if (match) {
-    let uri = match[1];
-    if (uri.startsWith("content:/") && !uri.startsWith("content://")) {
-      uri = "content://" + uri.slice("content:/".length);
-    }
-    return uri;
-  }
-  return raw;
+  return false;
+}
+
+export async function clearSavedExportDirectory(): Promise<void> {
+  await AsyncStorage.removeItem(SAVED_EXPORT_DIR_KEY);
+}
+
+export async function getSavedExportDirectory(): Promise<string | null> {
+  return await AsyncStorage.getItem(SAVED_EXPORT_DIR_KEY);
 }
 
 export async function saveFileToDevice({
@@ -37,34 +40,76 @@ export async function saveFileToDevice({
   mimeType,
 }: SaveFileOptions): Promise<SaveFileResult> {
   if (Platform.OS === "android") {
-    const result = await IntentLauncher.startActivityAsync(
-      "android.intent.action.CREATE_DOCUMENT",
-      {
-        category: "android.intent.category.OPENABLE",
-        type: mimeType,
-        extra: {
-          "android.intent.extra.TITLE": fileName,
-        },
-        flags: 3,
-      },
-    );
-
-    if (result.resultCode === IntentLauncher.ResultCode.Success && result.data) {
-      const targetUri = extractUriFromIntentData(result.data);
+    if (isNativeDocumentPickerAvailable()) {
+      const { saveDocuments, errorCodes } = require("@react-native-documents/picker");
+      const tempFile = new File(Paths.cache, fileName);
+      tempFile.create({ overwrite: true });
+      tempFile.write(content);
 
       try {
-        await StorageAccessFramework.writeAsStringAsync(targetUri, content, {
-          encoding: EncodingType.UTF8,
+        const response = await saveDocuments({
+          sourceUris: [tempFile.uri],
+          fileName,
+          mimeType,
         });
-      } catch {
-        const destinationFile = new File(targetUri);
-        destinationFile.write(content);
-      }
 
-      return { success: true, uri: targetUri };
+        const savedUri = response?.[0]?.uri;
+        return { success: true, uri: savedUri, method: "native-picker" };
+      } catch (err: unknown) {
+        const error = err as { code?: string; message?: string };
+        if (
+          error?.code === errorCodes?.OPERATION_CANCELED ||
+          error?.message?.toLowerCase().includes("cancel")
+        ) {
+          return { success: false, canceled: true };
+        }
+        throw err;
+      } finally {
+        try {
+          tempFile.delete();
+        } catch {}
+      }
     }
 
-    return { success: false, canceled: true };
+    let dirUri = await AsyncStorage.getItem(SAVED_EXPORT_DIR_KEY);
+
+    if (!dirUri) {
+      const permissions =
+        await StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        return { success: false, canceled: true };
+      }
+      dirUri = permissions.directoryUri;
+      await AsyncStorage.setItem(SAVED_EXPORT_DIR_KEY, dirUri);
+    }
+
+    let destUri: string;
+    try {
+      destUri = await StorageAccessFramework.createFileAsync(
+        dirUri,
+        fileName,
+        mimeType,
+      );
+    } catch {
+      const permissions =
+        await StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        return { success: false, canceled: true };
+      }
+      dirUri = permissions.directoryUri;
+      await AsyncStorage.setItem(SAVED_EXPORT_DIR_KEY, dirUri);
+      destUri = await StorageAccessFramework.createFileAsync(
+        dirUri,
+        fileName,
+        mimeType,
+      );
+    }
+
+    await StorageAccessFramework.writeAsStringAsync(destUri, content, {
+      encoding: EncodingType.UTF8,
+    });
+
+    return { success: true, uri: destUri, method: "saf-remembered" };
   }
 
   const file = new File(Paths.cache, fileName);
@@ -76,8 +121,8 @@ export async function saveFileToDevice({
       dialogTitle: `Save ${fileName}`,
       mimeType,
     });
-    return { success: true, uri: file.uri };
+    return { success: true, uri: file.uri, method: "sharing" };
   }
 
-  return { success: false };
+  return { success: true, uri: file.uri };
 }
