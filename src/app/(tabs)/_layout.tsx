@@ -3,10 +3,10 @@ import NavBar from "@/components/nav-bar";
 import Settings from "@/components/settings";
 import { useAppearance } from "@/contexts/appearance-context";
 import { useNavDirection } from "@/contexts/nav-direction-context";
+import { Image } from "expo-image";
 import { useEffect, useRef } from "react";
 import {
   Animated,
-  ImageBackground,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -46,43 +46,43 @@ export default function TabsLayout() {
         }}
       >
         <View style={{ width, height: "100%", backgroundColor: colors.background }}>
-          {backgrounds.calendar ? (
-            <ImageBackground
+          {backgrounds.calendar && (
+            <Image
               source={{ uri: backgrounds.calendar }}
-              style={{ width: "100%", height: "100%" }}
-              resizeMode="cover"
-            >
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  { backgroundColor: colors.background, opacity: 0.65 },
-                ]}
-              />
-              <CalendarGrid />
-            </ImageBackground>
-          ) : (
-            <CalendarGrid />
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
           )}
+          {backgrounds.calendar && (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: colors.background, opacity: 0.65 },
+              ]}
+            />
+          )}
+          <CalendarGrid />
         </View>
 
         <View style={{ width, height: "100%", backgroundColor: colors.background }}>
-          {backgrounds.settings ? (
-            <ImageBackground
+          {backgrounds.settings && (
+            <Image
               source={{ uri: backgrounds.settings }}
-              style={{ width: "100%", height: "100%" }}
-              resizeMode="cover"
-            >
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  { backgroundColor: colors.background, opacity: 0.65 },
-                ]}
-              />
-              <Settings />
-            </ImageBackground>
-          ) : (
-            <Settings />
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
           )}
+          {backgrounds.settings && (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: colors.background, opacity: 0.65 },
+              ]}
+            />
+          )}
+          <Settings />
         </View>
       </Animated.View>
       <NavBar />

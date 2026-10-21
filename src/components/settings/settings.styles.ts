@@ -10,7 +10,20 @@ export const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: NAV_BAR_CLEARANCE,
   },
-  title: { fontSize: 48, marginBottom: 24, marginTop: 16 },
+  headerRow: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    marginBottom: 24,
+    marginTop: 16,
+  },
+  title: { fontSize: 48 },
+  wandButton: {
+    position: "absolute",
+    right: 28,
+    padding: 8,
+  },
 
   gridRow: {
     flexDirection: "row",
@@ -65,14 +78,21 @@ export const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
   },
-  actionButtonText: { fontSize: 16, fontFamily: "Redaction20-Bold" },
+  actionButtonText: { fontSize: 16 },
+
   overlay: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
   },
-  box: { width: "100%", borderRadius: 20, padding: 24, alignItems: "center" },
+  box: {
+    width: "100%",
+    maxWidth: 380,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+  },
   message: { fontSize: 20, textAlign: "center", marginBottom: 24 },
   dialogButton: {
     paddingVertical: 12,
@@ -80,7 +100,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  dialogButtonText: { fontSize: 16, fontFamily: "Redaction20-Bold" },
+  dialogButtonText: { fontSize: 16 },
   dialogActionsColumn: { width: "100%", gap: 12 },
   inputLabel: {
     fontSize: 14,
@@ -96,27 +116,38 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 2,
     marginBottom: 10,
   },
-  studioCard: {
-    width: 290,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderStyle: "dashed",
+
+  studioModalContainer: {
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "88%",
+    borderRadius: 22,
+    padding: 20,
   },
-  studioSubheading: {
-    fontSize: 14,
-    marginBottom: 10,
-    marginTop: 6,
-    textTransform: "lowercase",
-  },
-  studioItemRow: {
+  studioModalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
   },
-  studioItemLabel: {
+  studioModalTitle: {
+    fontSize: 22,
+  },
+  studioSectionHeader: {
+    fontSize: 15,
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  studioRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  studioLabel: {
     fontSize: 15,
   },
   studioSmallBtn: {
@@ -127,29 +158,38 @@ export const styles = StyleSheet.create({
   studioSmallBtnText: {
     fontSize: 13,
   },
-  palettePillRow: {
+  colorFieldRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 14,
-  },
-  palettePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  palettePillText: {
-    fontSize: 13,
-  },
-  gridLockedBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginBottom: 20,
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  gridLockedText: {
-    fontSize: 18,
+  colorSwatch: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    marginRight: 8,
+  },
+  hexInput: {
+    width: 90,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  swatchRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  quickSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
   },
 });

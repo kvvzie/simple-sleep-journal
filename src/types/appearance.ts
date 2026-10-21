@@ -21,6 +21,7 @@ export type ThemePalette = {
 };
 
 export type FeatureFlags = {
+  colorSchemeToggleEnabled: boolean;
   bodyCareEnabled: boolean;
   moodStarsEnabled: boolean;
   commentsEnabled: boolean;

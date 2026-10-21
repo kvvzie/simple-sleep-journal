@@ -258,11 +258,31 @@ This 65% opacity overlay blends the user's custom photo with the active theme ba
 
 ### 6.3 `Settings` (`src/components/settings/`)
 - **File Structure**:
-  - `settings.tsx`: Complete settings panel, appearance controls, and data management.
-  - `settings.styles.ts`: Switch tracks, dialogs, studio cards, and responsive input styles.
-- **Grid Configuration**: Displays rows × columns wheel pickers when `gridPickerEnabled` is true, or a sleek locked badge when grid size is locked.
-- **Appearance Studio**: When `inAppCustomizationEnabled` is active, displays controls for picking fonts, importing/clearing background images, choosing color palettes, and toggling feature flags.
-- **Data & Look Management**: Unified actions for exporting logs (JSON/CSV/TXT), importing backups, importing looks (`.moodtheme`), exporting looks (`.moodtheme`), and resetting appearance.
+  - `settings.tsx`: Complete settings panel, Appearance Studio modal, and unified data management.
+  - `settings.styles.ts`: Switch tracks, dialogs, studio modal containers, hex color inputs, and responsive input styles.
+- **Header & Studio Launcher**:
+  - Displays the `settings` title with an access wand icon in the top-right corner.
+  - In `dynamic` mode: clicking the magic wand icon (`color-wand-outline`) opens the full **Appearance Studio Modal**.
+  - In `default` mode: clicking the top-right reset icon (`sparkles-outline`) displays a confirmation prompt: *"Reset all appearance settings back to vanilla defaults?"* and restores vanilla styling without opening Appearance Studio.
+- **Grid Configuration**:
+  - Displays rows × columns wheel pickers when `gridPickerEnabled` is true.
+  - When `gridPickerEnabled` is false, the grid rows and columns pickers disappear completely from the screen, maintaining the configured grid size cleanly without awkward locked badges.
+- **Color Scheme Toggle**:
+  - Controlled by the `colorSchemeToggleEnabled` feature flag.
+  - When enabled, renders the 3-state switch track using the signature outlined icons: `sunny-outline` (light), `contrast-outline` (automatic), and `moon-outline` (dark), with physics-based spring indicator interpolation.
+  - When disabled, the entire switch track is omitted, locking the app to the selected scheme.
+- **Typography & Font Credits**:
+  - Completely preserves the full attribution block for typeface design (Jeremy Mickel), creative direction (Forest Young), The Redaction authors (Titus Kaphar, Reginald Dwayne Betts), and application author (kvvzie).
+- **Appearance Studio Modal Overlay**:
+  - **Typography**: Displays the active font (Redaction, Comic Sans, or custom font), offers a `.ttf`/`.otf` picker, and a reset button.
+  - **Wallpapers**: Powered by `expo-image` with native Glide hardware decoding, supporting large photos, WebP, PNG, JPEG, and Samsung HEIC/HEIF camera captures for Calendar and Settings backgrounds.
+  - **Color Customization**: Direct hex color inputs and live preview swatches for background, text, card elements, selected highlights, and secondary text, accompanied by quick palette swatches.
+  - **Feature Toggles**: Runtime switches for color scheme switcher, razor blade tracker, mood stars, daily comments, and flexible grid picker.
+  - **Reset Button**: Embedded directly at the bottom of the studio to restore mode-appropriate defaults.
+- **Data & Look Management**:
+  - Primary action buttons: `export` and `import`.
+  - `export` opens format selection: JSON Backup, CSV Spreadsheet, TXT Summary, and (if allowed) App Look (`.moodtheme`).
+  - `import` opens choice dialog: Data Backup (JSON) or App Look (`.moodtheme`).
 
 ### 6.4 `NavBar` (`src/components/nav-bar/`)
 - **File Structure**:

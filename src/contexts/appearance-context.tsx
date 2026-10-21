@@ -207,9 +207,31 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
         };
       }
 
+      let cal = theme.backgrounds.calendar;
+      if (cal && !cal.startsWith("data:")) {
+        try {
+          const { readAsStringAsync, EncodingType } = require("expo-file-system/legacy");
+          const b64 = await readAsStringAsync(cal, { encoding: EncodingType.Base64 });
+          cal = `data:image/jpeg;base64,${b64}`;
+        } catch {}
+      }
+
+      let sett = theme.backgrounds.settings;
+      if (sett && !sett.startsWith("data:")) {
+        try {
+          const { readAsStringAsync, EncodingType } = require("expo-file-system/legacy");
+          const b64 = await readAsStringAsync(sett, { encoding: EncodingType.Base64 });
+          sett = `data:image/jpeg;base64,${b64}`;
+        } catch {}
+      }
+
       const activeTheme: AppTheme = {
         ...theme,
         name: customName || theme.name || "Custom Look",
+        backgrounds: {
+          calendar: cal,
+          settings: sett,
+        },
         features: effectiveFeatures,
       };
 

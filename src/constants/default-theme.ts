@@ -32,11 +32,12 @@ export const BASE_PALETTE: { light: ThemePaletteColors; dark: ThemePaletteColors
 };
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
+  colorSchemeToggleEnabled: true,
   bodyCareEnabled: true,
   moodStarsEnabled: true,
   commentsEnabled: true,
   gridPickerEnabled: true,
-  inAppCustomizationEnabled: true,
+  inAppCustomizationEnabled: false,
 };
 
 export const DEFAULT_THEME: AppTheme = {
@@ -55,7 +56,10 @@ export const DEFAULT_BUILD_CONFIG: BuildConfig = {
   mode: "dynamic",
   appName: "mood journal",
   packageId: "com.shittyassapps.sleepinapp",
-  features: DEFAULT_FEATURE_FLAGS,
+  features: {
+    ...DEFAULT_FEATURE_FLAGS,
+    inAppCustomizationEnabled: true,
+  },
   lockedGrid: null,
   bakedTheme: DEFAULT_THEME,
 };

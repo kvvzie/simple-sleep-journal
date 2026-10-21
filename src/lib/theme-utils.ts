@@ -106,6 +106,9 @@ export function parseAndValidateMoodTheme(
   const features: Partial<FeatureFlags> = {};
   if (raw.features && typeof raw.features === "object") {
     const rawFeat = raw.features as Record<string, unknown>;
+    if (typeof rawFeat.colorSchemeToggleEnabled === "boolean") {
+      features.colorSchemeToggleEnabled = rawFeat.colorSchemeToggleEnabled;
+    }
     if (typeof rawFeat.bodyCareEnabled === "boolean") {
       features.bodyCareEnabled = rawFeat.bodyCareEnabled;
     }
@@ -150,7 +153,10 @@ export function getResetDefaults(
 
   return {
     theme: { ...DEFAULT_THEME },
-    features: { ...DEFAULT_FEATURE_FLAGS },
+    features: {
+      ...DEFAULT_FEATURE_FLAGS,
+      inAppCustomizationEnabled: mode === "dynamic",
+    },
   };
 }
 

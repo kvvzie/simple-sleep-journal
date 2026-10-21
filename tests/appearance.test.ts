@@ -120,6 +120,7 @@ describe("Theme & Appearance Utilities", () => {
     };
 
     const bakedFeatures: FeatureFlags = {
+      colorSchemeToggleEnabled: false,
       bodyCareEnabled: false,
       moodStarsEnabled: true,
       commentsEnabled: false,
@@ -130,18 +131,22 @@ describe("Theme & Appearance Utilities", () => {
     // In baked mode, reset must restore baked values
     const bakedReset = getResetDefaults("baked", bakedTheme, bakedFeatures);
     assert.equal(bakedReset.theme.name, "Baked Custom Look");
+    assert.equal(bakedReset.features.colorSchemeToggleEnabled, false);
     assert.equal(bakedReset.features.bodyCareEnabled, false);
     assert.equal(bakedReset.features.commentsEnabled, false);
+    assert.equal(bakedReset.features.inAppCustomizationEnabled, false);
 
-    // In default mode, reset must restore pure default
+    // In default mode, reset must restore pure default with inAppCustomizationEnabled = false
     const defaultReset = getResetDefaults("default", bakedTheme, bakedFeatures);
     assert.equal(defaultReset.theme.name, DEFAULT_THEME.name);
     assert.equal(defaultReset.features.bodyCareEnabled, DEFAULT_FEATURE_FLAGS.bodyCareEnabled);
+    assert.equal(defaultReset.features.inAppCustomizationEnabled, false);
 
-    // In dynamic mode, reset must restore pure default
+    // In dynamic mode, reset must restore pure default with inAppCustomizationEnabled = true
     const dynamicReset = getResetDefaults("dynamic", bakedTheme, bakedFeatures);
     assert.equal(dynamicReset.theme.name, DEFAULT_THEME.name);
     assert.equal(dynamicReset.features.bodyCareEnabled, DEFAULT_FEATURE_FLAGS.bodyCareEnabled);
+    assert.equal(dynamicReset.features.inAppCustomizationEnabled, true);
   });
 
   it("isThemeExportAllowed adheres strictly to mode rules", () => {

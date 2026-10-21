@@ -48,6 +48,7 @@ export default function Layout() {
     "Redaction20-Regular": require("../../assets/fonts/Redaction20-Regular.otf"),
     "Redaction20-Italic": require("../../assets/fonts/Redaction20-Italic.otf"),
     "Redaction20-Bold": require("../../assets/fonts/Redaction20-Bold.otf"),
+    "ComicSans": require("../../assets/fonts/custom/ComicSans.ttf"),
   });
 
   const onLayoutRootView = useCallback(async () => {

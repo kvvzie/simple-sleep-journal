@@ -13,9 +13,9 @@ import {
   importLogs,
 } from "@/lib/db";
 import { saveFileToDevice } from "@/lib/file-saver";
+import { ThemePaletteColors } from "@/types/appearance";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
-import { EncodingType, readAsStringAsync } from "expo-file-system/legacy";
 import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
 import { memo, useEffect, useRef, useState } from "react";
@@ -24,7 +24,6 @@ import {
   DeviceEventEmitter,
   Modal,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -44,59 +43,19 @@ const columnsStepForPage = (page: number) => MAX_STEP - page;
 
 const MOOD_SCALE_MAX = 10;
 
-const COLOR_PRESETS = [
-  {
-    name: "vanilla",
-    palette: {},
-  },
-  {
-    name: "cyberpunk",
-    palette: {
-      dark: {
-        background: "#090A0F",
-        text: "#00FFCC",
-        backgroundElement: "#141724",
-        backgroundSelected: "#1F2538",
-        textSecondary: "#5D707F",
-      },
-    },
-  },
-  {
-    name: "mocha",
-    palette: {
-      dark: {
-        background: "#1C1714",
-        text: "#F5E2CF",
-        backgroundElement: "#2A211D",
-        backgroundSelected: "#3D302A",
-        textSecondary: "#A38C7D",
-      },
-    },
-  },
-  {
-    name: "matcha",
-    palette: {
-      dark: {
-        background: "#101813",
-        text: "#CBE8D0",
-        backgroundElement: "#1A261F",
-        backgroundSelected: "#273A2E",
-        textSecondary: "#6E8B75",
-      },
-    },
-  },
-  {
-    name: "twilight",
-    palette: {
-      dark: {
-        background: "#18121E",
-        text: "#F1D2FF",
-        backgroundElement: "#271E30",
-        backgroundSelected: "#3C2C4B",
-        textSecondary: "#977CA8",
-      },
-    },
-  },
+const QUICK_SWATCHES = [
+  "#000000",
+  "#ffffff",
+  "#141724",
+  "#00FFCC",
+  "#1C1714",
+  "#F5E2CF",
+  "#101813",
+  "#CBE8D0",
+  "#18121E",
+  "#F1D2FF",
+  "#FFB3BA",
+  "#60646C",
 ];
 
 function Settings() {
@@ -104,7 +63,6 @@ function Settings() {
   const {
     mode,
     canExportTheme,
-    canImportTheme,
     colors,
     theme,
     features,
@@ -113,6 +71,7 @@ function Settings() {
     resolveFont,
     updateTheme,
     updateFeatures,
+    updateColorOverride,
     updateBackground,
     setCustomFont,
     resetTheme,
@@ -126,26 +85,22 @@ function Settings() {
     colorSchemePref,
     setColorSchemePref,
     loaded,
-    rows,
-    columns,
   } = useSettings();
 
   const rowsRef = useRef<WheelPickerHandle>(null);
   const columnsRef = useRef<WheelPickerHandle>(null);
   const gridLockRef = useRef<string | null>(null);
 
-  const [exportDialogVisible, setExportDialogVisible] = useState(false);
-  const [exportType, setExportType] = useState<"json" | "txt" | "csv" | null>(
-    null,
-  );
+  const [studioModalVisible, setStudioModalVisible] = useState(false);
+  const [exportFormatDialogVisible, setExportFormatDialogVisible] = useState(false);
+  const [importChoiceDialogVisible, setImportChoiceDialogVisible] = useState(false);
+  const [exportType, setExportType] = useState<"json" | "txt" | "csv" | "theme" | null>(null);
   const [fileName, setFileName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [infoDialog, setInfoDialog] = useState({ visible: false, message: "" });
-
-  const [themeExportDialogVisible, setThemeExportDialogVisible] = useState(false);
   const [themeExportName, setThemeExportName] = useState("");
-  const [resetThemeConfirmVisible, setResetThemeConfirmVisible] = useState(false);
+  const [infoDialog, setInfoDialog] = useState({ visible: false, message: "" });
+  const [resetConfirmVisible, setResetConfirmVisible] = useState(false);
 
   const showInfo = (message: string) => {
     setInfoDialog({ visible: true, message });
@@ -157,11 +112,11 @@ function Settings() {
   const canDecreaseColumns = stepIndex < MAX_STEP;
 
   useEffect(() => {
-    if (loaded) {
+    if (loaded && features.gridPickerEnabled) {
       rowsRef.current?.syncTo(stepIndex);
       columnsRef.current?.syncTo(columnsPageForStep(stepIndex));
     }
-  }, [stepIndex, loaded]);
+  }, [stepIndex, loaded, features.gridPickerEnabled]);
 
   const [trackSize, setTrackSize] = useState({ width: 220, height: 52 });
   const innerWidth = trackSize.width - SWITCH_BORDER * 2;
@@ -180,6 +135,38 @@ function Settings() {
     rowsRef.current?.syncTo(idx);
   };
 
+  const switchOptions: {
+    key: ColorSchemePref;
+    icon: keyof typeof Ionicons.glyphMap;
+  }[] = [
+    { key: "light", icon: "sunny-outline" },
+    { key: "automatic", icon: "contrast-outline" },
+    { key: "dark", icon: "moon-outline" },
+  ];
+  const switchIndex = switchOptions.findIndex((o) => o.key === colorSchemePref);
+  const switchTranslate = useRef(new Animated.Value(switchIndex)).current;
+
+  useEffect(() => {
+    Animated.spring(switchTranslate, {
+      toValue: switchIndex,
+      useNativeDriver: true,
+      damping: 16,
+      stiffness: 180,
+    }).start();
+  }, [switchIndex]);
+
+  const swipePan = PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) =>
+      Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+    onPanResponderRelease: (_, g) => {
+      const order: ColorSchemePref[] = ["light", "automatic", "dark"];
+      const currentIdx = order.indexOf(colorSchemePref);
+      if (g.dx > 20 && currentIdx < 2) setColorSchemePref(order[currentIdx + 1]);
+      else if (g.dx < -20 && currentIdx > 0)
+        setColorSchemePref(order[currentIdx - 1]);
+    },
+  });
+
   const handlePickFont = async () => {
     try {
       const res = await DocumentPicker.getDocumentAsync({
@@ -189,7 +176,9 @@ function Settings() {
 
       if (res.canceled || !res.assets || res.assets.length === 0) return;
       const asset = res.assets[0];
-      const fontName = asset.name ? asset.name.replace(/\.[^/.]+$/, "") : "CustomFont";
+      const fontName = asset.name
+        ? asset.name.replace(/\.[^/.]+$/, "")
+        : "CustomFont";
 
       const ok = await setCustomFont({
         name: fontName,
@@ -211,129 +200,56 @@ function Settings() {
     showInfo("Font reset to default Redaction.");
   };
 
-  const handlePickBackground = async (screen: "calendar" | "settings") => {
+  const handlePickBackground = async (targetScreen: "calendar" | "settings") => {
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: ["image/*", "image/png", "image/jpeg", "image/webp"],
+        type: ["image/*", "*/*"],
         copyToCacheDirectory: true,
       });
 
       if (res.canceled || !res.assets || res.assets.length === 0) return;
       const asset = res.assets[0];
 
-      const base64 = await readAsStringAsync(asset.uri, {
-        encoding: EncodingType.Base64,
-      });
-      const mime = asset.mimeType || "image/jpeg";
-      const dataUri = `data:${mime};base64,${base64}`;
-
-      updateBackground(screen, dataUri);
-      showInfo(`${screen} background updated!`);
+      updateBackground(targetScreen, asset.uri);
+      showInfo(`${targetScreen} background updated!`);
     } catch {
       showInfo("Failed to load image file.");
     }
   };
 
-  const handleClearBackground = (screen: "calendar" | "settings") => {
-    updateBackground(screen, null);
-    showInfo(`${screen} background removed.`);
+  const handleClearBackground = (targetScreen: "calendar" | "settings") => {
+    updateBackground(targetScreen, null);
+    showInfo(`${targetScreen} background removed.`);
   };
 
-  const handleExportThemePress = () => {
-    setThemeExportName(theme.name || "My Theme");
-    setThemeExportDialogVisible(true);
-  };
-
-  const handleExportThemeConfirm = async () => {
-    setThemeExportDialogVisible(false);
-    const res = await exportTheme(themeExportName);
-    if (res.success) {
-      showInfo("App look exported successfully (.moodtheme)!");
-    } else if (!res.canceled) {
-      showInfo(res.error || "Failed to export theme.");
-    }
-  };
-
-  const handleImportThemePress = async () => {
-    const res = await importThemeFromFile();
-    if (res.success) {
-      showInfo("App look successfully imported!");
-      DeviceEventEmitter.emit("refreshCalendarGrid");
-    } else if (!res.canceled) {
-      showInfo(res.error || "Failed to import theme file.");
-    }
-  };
-
-  const handleResetThemeConfirm = async () => {
-    setResetThemeConfirmVisible(false);
-    await resetTheme();
-    showInfo(
-      mode === "baked"
-        ? "Appearance reset to baked defaults!"
-        : "Appearance reset to vanilla defaults!",
-    );
-    DeviceEventEmitter.emit("refreshCalendarGrid");
-  };
-
-  const getTargetX = (p: ColorSchemePref) => {
-    switch (p) {
-      case "light":
-        return SWITCH_PADDING;
-      case "automatic":
-        return SWITCH_PADDING + slotWidth;
-      case "dark":
-        return SWITCH_PADDING + slotWidth * 2;
-    }
-  };
-
-  const indicatorX = useRef(
-    new Animated.Value(getTargetX(colorSchemePref)),
-  ).current;
-
-  useEffect(() => {
-    Animated.spring(indicatorX, {
-      toValue: getTargetX(colorSchemePref),
-      useNativeDriver: true,
-      damping: 22,
-      stiffness: 260,
-    }).start();
-  }, [colorSchemePref, slotWidth]);
-
-  const setPrefAnimated = (next: ColorSchemePref) => {
-    setColorSchemePref(next);
-  };
-
-  const swipePan = PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) =>
-      Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
-    onPanResponderRelease: (_, g) => {
-      const order: ColorSchemePref[] = ["light", "automatic", "dark"];
-      const currentIdx = order.indexOf(colorSchemePref);
-      if (g.dx > 20 && currentIdx < 2) setPrefAnimated(order[currentIdx + 1]);
-      else if (g.dx < -20 && currentIdx > 0)
-        setPrefAnimated(order[currentIdx - 1]);
-    },
-  });
-
-  const formatDateDisplay = (dateStr: string) => {
-    if (!dateStr) return "";
-    const [y, m, d] = dateStr.split("-");
-    if (!y || !m || !d) return dateStr;
-    return `${d}.${m}.${y}`;
-  };
-
-  const openExportSetup = (type: "json" | "txt" | "csv") => {
+  const openExportSetup = (type: "json" | "txt" | "csv" | "theme") => {
+    setExportFormatDialogVisible(false);
     setExportType(type);
     const today = new Date().toISOString().split("T")[0];
-    const defaultName = `sleepinapp_${type}_${today}`;
-    setFileName(defaultName);
-    setStartDate("");
-    setEndDate("");
+    if (type === "theme") {
+      setThemeExportName(theme.name || "My Theme");
+    } else {
+      setFileName(`sleepinapp_${type}_${today}`);
+      setStartDate("");
+      setEndDate("");
+    }
   };
 
   const handleExportConfirm = async () => {
     if (!exportType) return;
-    setExportDialogVisible(false);
+
+    if (exportType === "theme") {
+      setExportType(null);
+      const res = await exportTheme(themeExportName || "My Theme");
+      if (res.success) {
+        showInfo("App look exported successfully (.moodtheme)!");
+      } else if (!res.canceled) {
+        showInfo(res.error || "Failed to export look.");
+      }
+      return;
+    }
+
+    setExportType(null);
 
     try {
       const logs = await getAllLogs();
@@ -348,7 +264,8 @@ function Settings() {
       let fileExtension = ".json";
 
       const sanitizedName =
-        fileName.trim() || `sleepinapp_export_${new Date().toISOString().split("T")[0]}`;
+        fileName.trim() ||
+        `sleepinapp_export_${new Date().toISOString().split("T")[0]}`;
 
       if (exportType === "json") {
         const allEdits = await getAllEdits();
@@ -541,15 +458,13 @@ function Settings() {
       } else if (!result.canceled) {
         showInfo("Failed to export your data file.");
       }
-
-      setExportType(null);
     } catch {
       showInfo("An error occurred during export.");
-      setExportType(null);
     }
   };
 
-  const handleImport = async () => {
+  const handleImportDataBackup = async () => {
+    setImportChoiceDialogVisible(false);
     try {
       const pickerRes = await DocumentPicker.getDocumentAsync({
         type: "*/*",
@@ -584,6 +499,94 @@ function Settings() {
     }
   };
 
+  const handleImportAppLook = async () => {
+    setImportChoiceDialogVisible(false);
+    const res = await importThemeFromFile();
+    if (res.success) {
+      showInfo("App look successfully imported!");
+      DeviceEventEmitter.emit("refreshCalendarGrid");
+    } else if (!res.canceled) {
+      showInfo(res.error || "Failed to import theme file.");
+    }
+  };
+
+  const handleResetThemeConfirm = async () => {
+    setResetConfirmVisible(false);
+    setStudioModalVisible(false);
+    await resetTheme();
+    showInfo(
+      mode === "baked"
+        ? "Appearance reset to baked build defaults!"
+        : "Appearance reset to vanilla defaults!",
+    );
+    DeviceEventEmitter.emit("refreshCalendarGrid");
+  };
+
+  const renderColorField = (
+    label: string,
+    key: keyof ThemePaletteColors,
+  ) => {
+    const activeVal = colors[key] || "#000000";
+    return (
+      <View key={key} style={{ marginBottom: 12 }}>
+        <View style={styles.colorFieldRow}>
+          <Text
+            style={[
+              styles.studioLabel,
+              { color: colors.text, fontFamily: resolveFont("regular") },
+            ]}
+          >
+            {label}
+          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View
+              style={[
+                styles.colorSwatch,
+                {
+                  backgroundColor: activeVal,
+                  borderColor: colors.textSecondary,
+                },
+              ]}
+            />
+            <TextInput
+              style={[
+                styles.hexInput,
+                {
+                  color: colors.text,
+                  borderColor: colors.textSecondary,
+                  fontFamily: resolveFont("regular"),
+                },
+              ]}
+              value={activeVal}
+              onChangeText={(txt) => {
+                const formatted = txt.startsWith("#") ? txt : `#${txt}`;
+                updateColorOverride(scheme, key, formatted);
+              }}
+              placeholder="#hex"
+              placeholderTextColor={colors.textSecondary}
+              maxLength={9}
+            />
+          </View>
+        </View>
+        <View style={styles.swatchRow}>
+          {QUICK_SWATCHES.map((swatchColor) => (
+            <Pressable
+              key={swatchColor}
+              onPress={() => updateColorOverride(scheme, key, swatchColor)}
+              style={[
+                styles.quickSwatch,
+                {
+                  backgroundColor: swatchColor,
+                  borderColor: colors.textSecondary,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} animated />
@@ -592,492 +595,255 @@ function Settings() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text
-          style={[
-            styles.title,
-            { color: colors.text, fontFamily: resolveFont("bold") },
-          ]}
-        >
-          settings
-        </Text>
-
-        {features.gridPickerEnabled ? (
-          loaded && (
-            <View style={styles.gridRow}>
-              <View style={styles.gridColumn}>
-                <Text
-                  style={[
-                    styles.gridLabel,
-                    {
-                      color: colors.textSecondary,
-                      fontFamily: resolveFont("italic"),
-                    },
-                  ]}
-                >
-                  rows
-                </Text>
-                <WheelPicker
-                  ref={rowsRef}
-                  page={stepIndex}
-                  totalPages={GRID_STEPS.length}
-                  renderLabel={(p) => String(GRID_STEPS[p].rows)}
-                  onSelected={onRowsSelected}
-                  canIncrease={canIncreaseRows}
-                  canDecrease={canDecreaseRows}
-                  arrowColor={colors.textSecondary}
-                  arrowSlotStyle={styles.gridArrow}
-                  pagerStyle={styles.gridPager}
-                  pageStyle={styles.gridPage}
-                  labelStyle={[
-                    styles.gridValue,
-                    { color: colors.text, fontFamily: resolveFont("bold") },
-                  ]}
-                  lockRef={gridLockRef}
-                  lockKey="rows"
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.xSign,
-                  { color: colors.text, fontFamily: resolveFont("bold") },
-                ]}
-              >
-                x
-              </Text>
-
-              <View style={styles.gridColumn}>
-                <Text
-                  style={[
-                    styles.gridLabel,
-                    {
-                      color: colors.textSecondary,
-                      fontFamily: resolveFont("italic"),
-                    },
-                  ]}
-                >
-                  columns
-                </Text>
-                <WheelPicker
-                  ref={columnsRef}
-                  page={columnsPageForStep(stepIndex)}
-                  totalPages={GRID_STEPS.length}
-                  renderLabel={(p) =>
-                    String(GRID_STEPS[columnsStepForPage(p)].columns)
-                  }
-                  onSelected={onColumnsSelected}
-                  canIncrease={canIncreaseColumns}
-                  canDecrease={canDecreaseColumns}
-                  arrowColor={colors.textSecondary}
-                  arrowSlotStyle={styles.gridArrow}
-                  pagerStyle={styles.gridPager}
-                  pageStyle={styles.gridPage}
-                  labelStyle={[
-                    styles.gridValue,
-                    { color: colors.text, fontFamily: resolveFont("bold") },
-                  ]}
-                  lockRef={gridLockRef}
-                  lockKey="columns"
-                />
-              </View>
-            </View>
-          )
-        ) : (
-          <View
+        <View style={styles.headerRow}>
+          <Text
             style={[
-              styles.gridLockedBadge,
-              { backgroundColor: colors.backgroundElement },
+              styles.title,
+              { color: colors.text, fontFamily: resolveFont("bold") },
             ]}
           >
+            settings
+          </Text>
+
+          {features.inAppCustomizationEnabled ? (
+            <Pressable
+              onPress={() => setStudioModalVisible(true)}
+              hitSlop={14}
+              style={styles.wandButton}
+            >
+              <Ionicons name="color-wand-outline" size={24} color={colors.text} />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => setResetConfirmVisible(true)}
+              hitSlop={14}
+              style={styles.wandButton}
+            >
+              <Ionicons
+                name="sparkles-outline"
+                size={22}
+                color={colors.textSecondary}
+              />
+            </Pressable>
+          )}
+        </View>
+
+        {features.gridPickerEnabled && loaded && (
+          <View style={styles.gridRow}>
+            <View style={styles.gridColumn}>
+              <Text
+                style={[
+                  styles.gridLabel,
+                  {
+                    color: colors.textSecondary,
+                    fontFamily: resolveFont("italic"),
+                  },
+                ]}
+              >
+                rows
+              </Text>
+              <WheelPicker
+                ref={rowsRef}
+                page={stepIndex}
+                totalPages={GRID_STEPS.length}
+                renderLabel={(p) => String(GRID_STEPS[p].rows)}
+                onSelected={onRowsSelected}
+                canIncrease={canIncreaseRows}
+                canDecrease={canDecreaseRows}
+                arrowColor={colors.textSecondary}
+                arrowSlotStyle={styles.gridArrow}
+                pagerStyle={styles.gridPager}
+                pageStyle={styles.gridPage}
+                labelStyle={[
+                  styles.gridValue,
+                  { color: colors.text, fontFamily: resolveFont("bold") },
+                ]}
+                lockRef={gridLockRef}
+                lockKey="rows"
+              />
+            </View>
+
             <Text
               style={[
-                styles.gridLockedText,
+                styles.xSign,
                 { color: colors.text, fontFamily: resolveFont("bold") },
               ]}
             >
-              grid size: {rows} × {columns} (locked)
+              x
             </Text>
+
+            <View style={styles.gridColumn}>
+              <Text
+                style={[
+                  styles.gridLabel,
+                  {
+                    color: colors.textSecondary,
+                    fontFamily: resolveFont("italic"),
+                  },
+                ]}
+              >
+                columns
+              </Text>
+              <WheelPicker
+                ref={columnsRef}
+                page={columnsPageForStep(stepIndex)}
+                totalPages={GRID_STEPS.length}
+                renderLabel={(p) =>
+                  String(GRID_STEPS[columnsStepForPage(p)].columns)
+                }
+                onSelected={onColumnsSelected}
+                canIncrease={canIncreaseColumns}
+                canDecrease={canDecreaseColumns}
+                arrowColor={colors.textSecondary}
+                arrowSlotStyle={styles.gridArrow}
+                pagerStyle={styles.gridPager}
+                pageStyle={styles.gridPage}
+                labelStyle={[
+                  styles.gridValue,
+                  { color: colors.text, fontFamily: resolveFont("bold") },
+                ]}
+                lockRef={gridLockRef}
+                lockKey="columns"
+              />
+            </View>
           </View>
+        )}
+
+        {features.colorSchemeToggleEnabled && (
+          <>
+            <Text
+              style={[
+                styles.sectionLabel,
+                { color: colors.textSecondary, fontFamily: resolveFont("italic") },
+              ]}
+            >
+              color scheme
+            </Text>
+            <View
+              style={[styles.switchTrack, { borderColor: colors.textSecondary }]}
+              {...swipePan.panHandlers}
+            >
+              <Animated.View
+                style={[
+                  styles.switchIndicator,
+                  {
+                    backgroundColor: colors.text,
+                    width: slotWidth,
+                    height: indicatorHeight,
+                    top: SWITCH_PADDING,
+                    left: SWITCH_PADDING,
+                    transform: [
+                      {
+                        translateX: switchTranslate.interpolate({
+                          inputRange: [0, 1, 2],
+                          outputRange: [0, slotWidth, slotWidth * 2],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+              {switchOptions.map((opt, i) => (
+                <Pressable
+                  key={opt.key}
+                  onPress={() => setColorSchemePref(opt.key)}
+                  style={styles.switchOption}
+                >
+                  <Ionicons
+                    name={opt.icon}
+                    size={18}
+                    color={
+                      switchIndex === i
+                        ? colors.background
+                        : colors.textSecondary
+                    }
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </>
         )}
 
         <Text
           style={[
-            styles.sectionLabel,
+            styles.creditsLabel,
             { color: colors.textSecondary, fontFamily: resolveFont("italic") },
           ]}
         >
-          color scheme
+          font credits
         </Text>
-        <View
-          style={[styles.switchTrack, { borderColor: colors.textSecondary }]}
-          {...swipePan.panHandlers}
+        <Text
+          style={[
+            styles.creditRole,
+            { color: colors.textSecondary, fontFamily: resolveFont("regular") },
+          ]}
         >
-          <Animated.View
+          typeface design
+        </Text>
+        <Text
+          style={[
+            styles.creditName,
+            { color: colors.text, fontFamily: resolveFont("regular") },
+          ]}
+        >
+          Jeremy Mickel
+        </Text>
+
+        <Text
+          style={[
+            styles.creditRole,
+            { color: colors.textSecondary, fontFamily: resolveFont("regular") },
+          ]}
+        >
+          creative direction
+        </Text>
+        <Text
+          style={[
+            styles.creditName,
+            { color: colors.text, fontFamily: resolveFont("regular") },
+          ]}
+        >
+          Forest Young
+        </Text>
+
+        <Text
+          style={[
+            styles.creditRole,
+            { color: colors.textSecondary, fontFamily: resolveFont("regular") },
+          ]}
+        >
+          the redaction
+        </Text>
+        <View style={styles.redactionBlock}>
+          <Text
             style={[
-              styles.switchIndicator,
-              {
-                backgroundColor: colors.text,
-                width: slotWidth,
-                height: indicatorHeight,
-                top: SWITCH_PADDING,
-                transform: [{ translateX: indicatorX }],
-              },
+              styles.creditName,
+              { color: colors.text, fontFamily: resolveFont("regular") },
             ]}
-          />
-          <Pressable
-            style={styles.switchOption}
-            onPress={() => setPrefAnimated("light")}
-            onLayout={(e) => {
-              const { width, height } = e.nativeEvent.layout;
-              if (width && height) {
-                setTrackSize({
-                  width: width * 3 + SWITCH_BORDER * 2 + SWITCH_PADDING * 2,
-                  height: height + SWITCH_BORDER * 2 + SWITCH_PADDING * 2,
-                });
-              }
-            }}
           >
-            <Ionicons
-              name="sunny-sharp"
-              size={18}
-              color={
-                colorSchemePref === "light"
-                  ? colors.background
-                  : colors.textSecondary
-              }
-            />
-          </Pressable>
-          <Pressable
-            style={styles.switchOption}
-            onPress={() => setPrefAnimated("automatic")}
+            Titus Kaphar
+          </Text>
+          <Text
+            style={[
+              styles.creditName,
+              { color: colors.text, fontFamily: resolveFont("regular") },
+            ]}
           >
-            <Ionicons
-              name="phone-portrait-sharp"
-              size={18}
-              color={
-                colorSchemePref === "automatic"
-                  ? colors.background
-                  : colors.textSecondary
-              }
-            />
-          </Pressable>
+            Reginald Dwayne Betts
+          </Text>
           <Pressable
-            style={styles.switchOption}
-            onPress={() => setPrefAnimated("dark")}
+            onPress={() => Linking.openURL("https://www.redaction.us/")}
           >
-            <Ionicons
-              name="moon-sharp"
-              size={18}
-              color={
-                colorSchemePref === "dark"
-                  ? colors.background
-                  : colors.textSecondary
-              }
-            />
+            <Text
+              style={[
+                styles.redactionLink,
+                { color: colors.text, fontFamily: resolveFont("regular") },
+              ]}
+            >
+              redaction.us
+            </Text>
           </Pressable>
         </View>
-
-        {features.inAppCustomizationEnabled && (
-          <View
-            style={[
-              styles.studioCard,
-              {
-                borderColor: colors.textSecondary,
-                backgroundColor: colors.backgroundElement,
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.studioSubheading,
-                { color: colors.text, fontFamily: resolveFont("bold") },
-              ]}
-            >
-              appearance studio
-            </Text>
-
-            <View style={styles.studioItemRow}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text
-                  style={[
-                    styles.studioItemLabel,
-                    { color: colors.text, fontFamily: resolveFont("regular") },
-                  ]}
-                >
-                  font: {customFont?.name || "Redaction"}
-                </Text>
-              </View>
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                <Pressable
-                  onPress={handlePickFont}
-                  style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
-                >
-                  <Text
-                    style={[
-                      styles.studioSmallBtnText,
-                      { color: colors.background, fontFamily: resolveFont("bold") },
-                    ]}
-                  >
-                    pick .ttf
-                  </Text>
-                </Pressable>
-                {customFont && (
-                  <Pressable
-                    onPress={handleResetFont}
-                    style={[
-                      styles.studioSmallBtn,
-                      { backgroundColor: colors.backgroundSelected },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.studioSmallBtnText,
-                        { color: colors.text, fontFamily: resolveFont("regular") },
-                      ]}
-                    >
-                      reset
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.studioItemRow}>
-              <Text
-                style={[
-                  styles.studioItemLabel,
-                  { color: colors.text, fontFamily: resolveFont("regular") },
-                ]}
-              >
-                calendar bg: {backgrounds.calendar ? "custom" : "default"}
-              </Text>
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                <Pressable
-                  onPress={() => handlePickBackground("calendar")}
-                  style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
-                >
-                  <Text
-                    style={[
-                      styles.studioSmallBtnText,
-                      { color: colors.background, fontFamily: resolveFont("bold") },
-                    ]}
-                  >
-                    pick
-                  </Text>
-                </Pressable>
-                {backgrounds.calendar && (
-                  <Pressable
-                    onPress={() => handleClearBackground("calendar")}
-                    style={[
-                      styles.studioSmallBtn,
-                      { backgroundColor: colors.backgroundSelected },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.studioSmallBtnText,
-                        { color: colors.text, fontFamily: resolveFont("regular") },
-                      ]}
-                    >
-                      clear
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.studioItemRow}>
-              <Text
-                style={[
-                  styles.studioItemLabel,
-                  { color: colors.text, fontFamily: resolveFont("regular") },
-                ]}
-              >
-                settings bg: {backgrounds.settings ? "custom" : "default"}
-              </Text>
-              <View style={{ flexDirection: "row", gap: 6 }}>
-                <Pressable
-                  onPress={() => handlePickBackground("settings")}
-                  style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
-                >
-                  <Text
-                    style={[
-                      styles.studioSmallBtnText,
-                      { color: colors.background, fontFamily: resolveFont("bold") },
-                    ]}
-                  >
-                    pick
-                  </Text>
-                </Pressable>
-                {backgrounds.settings && (
-                  <Pressable
-                    onPress={() => handleClearBackground("settings")}
-                    style={[
-                      styles.studioSmallBtn,
-                      { backgroundColor: colors.backgroundSelected },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.studioSmallBtnText,
-                        { color: colors.text, fontFamily: resolveFont("regular") },
-                      ]}
-                    >
-                      clear
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-
-            <Text
-              style={[
-                styles.studioSubheading,
-                { color: colors.textSecondary, fontFamily: resolveFont("italic") },
-              ]}
-            >
-              quick palettes
-            </Text>
-            <View style={styles.palettePillRow}>
-              {COLOR_PRESETS.map((p) => {
-                const isActive = theme.name === p.name;
-                return (
-                  <Pressable
-                    key={p.name}
-                    onPress={() =>
-                      updateTheme({
-                        name: p.name,
-                        palette: p.palette,
-                      })
-                    }
-                    style={[
-                      styles.palettePill,
-                      {
-                        backgroundColor: isActive
-                          ? colors.text
-                          : colors.backgroundSelected,
-                        borderColor: colors.textSecondary,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.palettePillText,
-                        {
-                          color: isActive ? colors.background : colors.text,
-                          fontFamily: resolveFont(isActive ? "bold" : "regular"),
-                        },
-                      ]}
-                    >
-                      {p.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <Text
-              style={[
-                styles.studioSubheading,
-                { color: colors.textSecondary, fontFamily: resolveFont("italic") },
-              ]}
-            >
-              feature toggles
-            </Text>
-
-            <Pressable
-              onPress={() =>
-                updateFeatures({
-                  bodyCareEnabled: !features.bodyCareEnabled,
-                })
-              }
-              style={styles.studioItemRow}
-            >
-              <Text
-                style={[
-                  styles.studioItemLabel,
-                  { color: colors.text, fontFamily: resolveFont("regular") },
-                ]}
-              >
-                razor blade tracker
-              </Text>
-              <Ionicons
-                name={features.bodyCareEnabled ? "checkbox" : "square-outline"}
-                size={22}
-                color={colors.text}
-              />
-            </Pressable>
-
-            <Pressable
-              onPress={() =>
-                updateFeatures({
-                  moodStarsEnabled: !features.moodStarsEnabled,
-                })
-              }
-              style={styles.studioItemRow}
-            >
-              <Text
-                style={[
-                  styles.studioItemLabel,
-                  { color: colors.text, fontFamily: resolveFont("regular") },
-                ]}
-              >
-                mood star ratings
-              </Text>
-              <Ionicons
-                name={features.moodStarsEnabled ? "checkbox" : "square-outline"}
-                size={22}
-                color={colors.text}
-              />
-            </Pressable>
-
-            <Pressable
-              onPress={() =>
-                updateFeatures({
-                  commentsEnabled: !features.commentsEnabled,
-                })
-              }
-              style={styles.studioItemRow}
-            >
-              <Text
-                style={[
-                  styles.studioItemLabel,
-                  { color: colors.text, fontFamily: resolveFont("regular") },
-                ]}
-              >
-                day notes / comments
-              </Text>
-              <Ionicons
-                name={features.commentsEnabled ? "checkbox" : "square-outline"}
-                size={22}
-                color={colors.text}
-              />
-            </Pressable>
-
-            <Pressable
-              onPress={() =>
-                updateFeatures({
-                  gridPickerEnabled: !features.gridPickerEnabled,
-                })
-              }
-              style={styles.studioItemRow}
-            >
-              <Text
-                style={[
-                  styles.studioItemLabel,
-                  { color: colors.text, fontFamily: resolveFont("regular") },
-                ]}
-              >
-                flexible grid picker
-              </Text>
-              <Ionicons
-                name={features.gridPickerEnabled ? "checkbox" : "square-outline"}
-                size={22}
-                color={colors.text}
-              />
-            </Pressable>
-          </View>
-        )}
 
         <Text
           style={[
@@ -1104,15 +870,12 @@ function Settings() {
             { color: colors.textSecondary, fontFamily: resolveFont("italic") },
           ]}
         >
-          data & appearance management
+          data management
         </Text>
 
         <View style={styles.actionRow}>
           <Pressable
-            onPressIn={() => {
-              setExportType(null);
-              setExportDialogVisible(true);
-            }}
+            onPressIn={() => setExportFormatDialogVisible(true)}
             style={[styles.actionButton, { backgroundColor: colors.text }]}
           >
             <Text
@@ -1121,12 +884,12 @@ function Settings() {
                 { color: colors.background, fontFamily: resolveFont("bold") },
               ]}
             >
-              export data
+              export
             </Text>
           </Pressable>
 
           <Pressable
-            onPressIn={handleImport}
+            onPressIn={() => setImportChoiceDialogVisible(true)}
             style={[styles.actionButton, { backgroundColor: colors.text }]}
           >
             <Text
@@ -1135,148 +898,224 @@ function Settings() {
                 { color: colors.background, fontFamily: resolveFont("bold") },
               ]}
             >
-              import data
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.actionRow}>
-          {canExportTheme && (
-            <Pressable
-              onPressIn={handleExportThemePress}
-              style={[styles.actionButton, { backgroundColor: colors.text }]}
-            >
-              <Text
-                style={[
-                  styles.actionButtonText,
-                  { color: colors.background, fontFamily: resolveFont("bold") },
-                ]}
-              >
-                export look
-              </Text>
-            </Pressable>
-          )}
-
-          {canImportTheme && (
-            <Pressable
-              onPressIn={handleImportThemePress}
-              style={[styles.actionButton, { backgroundColor: colors.text }]}
-            >
-              <Text
-                style={[
-                  styles.actionButtonText,
-                  { color: colors.background, fontFamily: resolveFont("bold") },
-                ]}
-              >
-                import look
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        <View style={[styles.actionRow, { justifyContent: "center" }]}>
-          <Pressable
-            onPressIn={() => setResetThemeConfirmVisible(true)}
-            style={[
-              styles.actionButton,
-              { backgroundColor: colors.backgroundElement },
-            ]}
-          >
-            <Text
-              style={[
-                styles.actionButtonText,
-                { color: colors.text, fontFamily: resolveFont("bold") },
-              ]}
-            >
-              reset appearance
+              import
             </Text>
           </Pressable>
         </View>
       </ScrollView>
 
+      {/* Export Format Dialog */}
       <Modal
-        visible={exportDialogVisible}
+        visible={exportFormatDialogVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setExportDialogVisible(false)}
+        onRequestClose={() => setExportFormatDialogVisible(false)}
       >
         <Pressable
           style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
-          onPress={() => setExportDialogVisible(false)}
+          onPress={() => setExportFormatDialogVisible(false)}
         >
           <Pressable
             style={[styles.box, { backgroundColor: colors.modalBackground }]}
             onPress={() => {}}
           >
-            {exportType === null ? (
+            <Text
+              style={[
+                styles.message,
+                { color: colors.text, fontFamily: resolveFont("regular") },
+              ]}
+            >
+              Choose export format
+            </Text>
+            <View style={styles.dialogActionsColumn}>
+              <Pressable
+                style={[styles.dialogButton, { backgroundColor: colors.text }]}
+                onPress={() => openExportSetup("json")}
+              >
+                <Text
+                  style={[
+                    styles.dialogButtonText,
+                    {
+                      color: colors.background,
+                      fontFamily: resolveFont("bold"),
+                    },
+                  ]}
+                >
+                  Backup for App (JSON)
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.dialogButton, { backgroundColor: colors.text }]}
+                onPress={() => openExportSetup("csv")}
+              >
+                <Text
+                  style={[
+                    styles.dialogButtonText,
+                    {
+                      color: colors.background,
+                      fontFamily: resolveFont("bold"),
+                    },
+                  ]}
+                >
+                  Spreadsheet (CSV)
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.dialogButton, { backgroundColor: colors.text }]}
+                onPress={() => openExportSetup("txt")}
+              >
+                <Text
+                  style={[
+                    styles.dialogButtonText,
+                    {
+                      color: colors.background,
+                      fontFamily: resolveFont("bold"),
+                    },
+                  ]}
+                >
+                  Text Summary (TXT)
+                </Text>
+              </Pressable>
+              {canExportTheme && (
+                <Pressable
+                  style={[
+                    styles.dialogButton,
+                    { backgroundColor: colors.backgroundElement },
+                  ]}
+                  onPress={() => openExportSetup("theme")}
+                >
+                  <Text
+                    style={[
+                      styles.dialogButtonText,
+                      {
+                        color: colors.text,
+                        fontFamily: resolveFont("bold"),
+                      },
+                    ]}
+                  >
+                    App Look (.moodtheme)
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Import Choice Dialog */}
+      <Modal
+        visible={importChoiceDialogVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImportChoiceDialogVisible(false)}
+      >
+        <Pressable
+          style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
+          onPress={() => setImportChoiceDialogVisible(false)}
+        >
+          <Pressable
+            style={[styles.box, { backgroundColor: colors.modalBackground }]}
+            onPress={() => {}}
+          >
+            <Text
+              style={[
+                styles.message,
+                { color: colors.text, fontFamily: resolveFont("regular") },
+              ]}
+            >
+              Choose what to import
+            </Text>
+            <View style={styles.dialogActionsColumn}>
+              <Pressable
+                style={[styles.dialogButton, { backgroundColor: colors.text }]}
+                onPress={handleImportDataBackup}
+              >
+                <Text
+                  style={[
+                    styles.dialogButtonText,
+                    {
+                      color: colors.background,
+                      fontFamily: resolveFont("bold"),
+                    },
+                  ]}
+                >
+                  Data Backup (JSON)
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.dialogButton,
+                  { backgroundColor: colors.backgroundElement },
+                ]}
+                onPress={handleImportAppLook}
+              >
+                <Text
+                  style={[
+                    styles.dialogButtonText,
+                    {
+                      color: colors.text,
+                      fontFamily: resolveFont("bold"),
+                    },
+                  ]}
+                >
+                  App Look (.moodtheme)
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Export Setup / Details Dialog */}
+      <Modal
+        visible={exportType !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setExportType(null)}
+      >
+        <Pressable
+          style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
+          onPress={() => setExportType(null)}
+        >
+          <Pressable
+            style={[styles.box, { backgroundColor: colors.modalBackground }]}
+            onPress={() => {}}
+          >
+            {exportType === "theme" ? (
               <>
                 <Text
                   style={[
                     styles.message,
-                    { color: colors.text, fontFamily: resolveFont("regular") },
+                    { color: colors.text, fontFamily: resolveFont("bold") },
                   ]}
                 >
-                  Choose export format
+                  Export Look (.moodtheme)
                 </Text>
-                <View style={styles.dialogActionsColumn}>
-                  <Pressable
-                    style={[
-                      styles.dialogButton,
-                      { backgroundColor: colors.text },
-                    ]}
-                    onPress={() => openExportSetup("json")}
-                  >
-                    <Text
-                      style={[
-                        styles.dialogButtonText,
-                        {
-                          color: colors.background,
-                          fontFamily: resolveFont("bold"),
-                        },
-                      ]}
-                    >
-                      Backup for App (JSON)
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.dialogButton,
-                      { backgroundColor: colors.text },
-                    ]}
-                    onPress={() => openExportSetup("csv")}
-                  >
-                    <Text
-                      style={[
-                        styles.dialogButtonText,
-                        {
-                          color: colors.background,
-                          fontFamily: resolveFont("bold"),
-                        },
-                      ]}
-                    >
-                      Spreadsheet (CSV)
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.dialogButton,
-                      { backgroundColor: colors.text },
-                    ]}
-                    onPress={() => openExportSetup("txt")}
-                  >
-                    <Text
-                      style={[
-                        styles.dialogButtonText,
-                        {
-                          color: colors.background,
-                          fontFamily: resolveFont("bold"),
-                        },
-                      ]}
-                    >
-                      Text Summary (TXT)
-                    </Text>
-                  </Pressable>
-                </View>
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    {
+                      color: colors.textSecondary,
+                      fontFamily: resolveFont("regular"),
+                    },
+                  ]}
+                >
+                  Theme Name:
+                </Text>
+                <TextInput
+                  style={[
+                    styles.inputField,
+                    {
+                      color: colors.text,
+                      borderBottomColor: colors.textSecondary,
+                      fontFamily: resolveFont("regular"),
+                    },
+                  ]}
+                  value={themeExportName}
+                  onChangeText={setThemeExportName}
+                  placeholder="e.g. Cozy Cat"
+                  placeholderTextColor={colors.textSecondary}
+                />
               </>
             ) : (
               <>
@@ -1286,7 +1125,7 @@ function Settings() {
                     { color: colors.text, fontFamily: resolveFont("bold") },
                   ]}
                 >
-                  Export {exportType.toUpperCase()}
+                  Export {exportType?.toUpperCase()}
                 </Text>
 
                 <Text
@@ -1370,109 +1209,8 @@ function Settings() {
                     />
                   </>
                 )}
-
-                <View
-                  style={[
-                    styles.dialogActionsColumn,
-                    { marginTop: 16, flexDirection: "row" },
-                  ]}
-                >
-                  <Pressable
-                    style={[
-                      styles.dialogButton,
-                      {
-                        backgroundColor: colors.backgroundElement,
-                        flex: 1,
-                      },
-                    ]}
-                    onPress={() => setExportType(null)}
-                  >
-                    <Text
-                      style={[
-                        styles.dialogButtonText,
-                        {
-                          color: colors.text,
-                          fontFamily: resolveFont("bold"),
-                        },
-                      ]}
-                    >
-                      Back
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.dialogButton,
-                      { backgroundColor: colors.text, flex: 1 },
-                    ]}
-                    onPress={handleExportConfirm}
-                  >
-                    <Text
-                      style={[
-                        styles.dialogButtonText,
-                        {
-                          color: colors.background,
-                          fontFamily: resolveFont("bold"),
-                        },
-                      ]}
-                    >
-                      Save
-                    </Text>
-                  </Pressable>
-                </View>
               </>
             )}
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal
-        visible={themeExportDialogVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setThemeExportDialogVisible(false)}
-      >
-        <Pressable
-          style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
-          onPress={() => setThemeExportDialogVisible(false)}
-        >
-          <Pressable
-            style={[styles.box, { backgroundColor: colors.modalBackground }]}
-            onPress={() => {}}
-          >
-            <Text
-              style={[
-                styles.message,
-                { color: colors.text, fontFamily: resolveFont("bold") },
-              ]}
-            >
-              Export Look (.moodtheme)
-            </Text>
-            <Text
-              style={[
-                styles.inputLabel,
-                {
-                  color: colors.textSecondary,
-                  fontFamily: resolveFont("regular"),
-                },
-              ]}
-            >
-              Theme Name:
-            </Text>
-            <TextInput
-              style={[
-                styles.inputField,
-                {
-                  color: colors.text,
-                  borderBottomColor: colors.textSecondary,
-                  fontFamily: resolveFont("regular"),
-                },
-              ]}
-              value={themeExportName}
-              onChangeText={setThemeExportName}
-              placeholder="e.g. Cozy Cat"
-              placeholderTextColor={colors.textSecondary}
-            />
 
             <View
               style={[
@@ -1483,14 +1221,20 @@ function Settings() {
               <Pressable
                 style={[
                   styles.dialogButton,
-                  { backgroundColor: colors.backgroundElement, flex: 1 },
+                  {
+                    backgroundColor: colors.backgroundElement,
+                    flex: 1,
+                  },
                 ]}
-                onPress={() => setThemeExportDialogVisible(false)}
+                onPress={() => setExportType(null)}
               >
                 <Text
                   style={[
                     styles.dialogButtonText,
-                    { color: colors.text, fontFamily: resolveFont("bold") },
+                    {
+                      color: colors.text,
+                      fontFamily: resolveFont("bold"),
+                    },
                   ]}
                 >
                   Cancel
@@ -1502,7 +1246,7 @@ function Settings() {
                   styles.dialogButton,
                   { backgroundColor: colors.text, flex: 1 },
                 ]}
-                onPress={handleExportThemeConfirm}
+                onPress={handleExportConfirm}
               >
                 <Text
                   style={[
@@ -1513,7 +1257,7 @@ function Settings() {
                     },
                   ]}
                 >
-                  Export
+                  Save
                 </Text>
               </Pressable>
             </View>
@@ -1521,17 +1265,399 @@ function Settings() {
         </Pressable>
       </Modal>
 
+      {/* Appearance Studio Modal */}
+      <Modal
+        visible={studioModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStudioModalVisible(false)}
+      >
+        <Pressable
+          style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
+          onPress={() => setStudioModalVisible(false)}
+        >
+          <Pressable
+            style={[
+              styles.studioModalContainer,
+              { backgroundColor: colors.modalBackground },
+            ]}
+            onPress={() => {}}
+          >
+            <View
+              style={[
+                styles.studioModalHeader,
+                { borderBottomColor: colors.textSecondary },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.studioModalTitle,
+                  { color: colors.text, fontFamily: resolveFont("bold") },
+                ]}
+              >
+                appearance studio
+              </Text>
+              <Pressable
+                onPress={() => setStudioModalVisible(false)}
+                hitSlop={12}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              {/* Typography */}
+              <Text
+                style={[
+                  styles.studioSectionHeader,
+                  { color: colors.textSecondary, fontFamily: resolveFont("italic") },
+                ]}
+              >
+                typography
+              </Text>
+              <View style={styles.studioRow}>
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  font: {customFont?.name || "Redaction"}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <Pressable
+                    onPress={handlePickFont}
+                    style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
+                  >
+                    <Text
+                      style={[
+                        styles.studioSmallBtnText,
+                        {
+                          color: colors.background,
+                          fontFamily: resolveFont("bold"),
+                        },
+                      ]}
+                    >
+                      pick .ttf
+                    </Text>
+                  </Pressable>
+                  {customFont && (
+                    <Pressable
+                      onPress={handleResetFont}
+                      style={[
+                        styles.studioSmallBtn,
+                        { backgroundColor: colors.backgroundElement },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.studioSmallBtnText,
+                          {
+                            color: colors.text,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                      >
+                        reset
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              {/* Screen Wallpapers */}
+              <Text
+                style={[
+                  styles.studioSectionHeader,
+                  { color: colors.textSecondary, fontFamily: resolveFont("italic") },
+                ]}
+              >
+                wallpapers
+              </Text>
+              <View style={styles.studioRow}>
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  calendar: {backgrounds.calendar ? "custom" : "none"}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <Pressable
+                    onPress={() => handlePickBackground("calendar")}
+                    style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
+                  >
+                    <Text
+                      style={[
+                        styles.studioSmallBtnText,
+                        {
+                          color: colors.background,
+                          fontFamily: resolveFont("bold"),
+                        },
+                      ]}
+                    >
+                      pick
+                    </Text>
+                  </Pressable>
+                  {backgrounds.calendar && (
+                    <Pressable
+                      onPress={() => handleClearBackground("calendar")}
+                      style={[
+                        styles.studioSmallBtn,
+                        { backgroundColor: colors.backgroundElement },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.studioSmallBtnText,
+                          {
+                            color: colors.text,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                      >
+                        clear
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              <View style={styles.studioRow}>
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  settings: {backgrounds.settings ? "custom" : "none"}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <Pressable
+                    onPress={() => handlePickBackground("settings")}
+                    style={[styles.studioSmallBtn, { backgroundColor: colors.text }]}
+                  >
+                    <Text
+                      style={[
+                        styles.studioSmallBtnText,
+                        {
+                          color: colors.background,
+                          fontFamily: resolveFont("bold"),
+                        },
+                      ]}
+                    >
+                      pick
+                    </Text>
+                  </Pressable>
+                  {backgrounds.settings && (
+                    <Pressable
+                      onPress={() => handleClearBackground("settings")}
+                      style={[
+                        styles.studioSmallBtn,
+                        { backgroundColor: colors.backgroundElement },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.studioSmallBtnText,
+                          {
+                            color: colors.text,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                      >
+                        clear
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              {/* Color Customizer */}
+              <Text
+                style={[
+                  styles.studioSectionHeader,
+                  { color: colors.textSecondary, fontFamily: resolveFont("italic") },
+                ]}
+              >
+                color customization ({scheme} mode)
+              </Text>
+              {renderColorField("background", "background")}
+              {renderColorField("text", "text")}
+              {renderColorField("element / card", "backgroundElement")}
+              {renderColorField("selected item", "backgroundSelected")}
+              {renderColorField("secondary text", "textSecondary")}
+
+              {/* Feature Toggles */}
+              <Text
+                style={[
+                  styles.studioSectionHeader,
+                  { color: colors.textSecondary, fontFamily: resolveFont("italic") },
+                ]}
+              >
+                feature toggles
+              </Text>
+
+              <Pressable
+                onPress={() =>
+                  updateFeatures({
+                    colorSchemeToggleEnabled: !features.colorSchemeToggleEnabled,
+                  })
+                }
+                style={styles.studioRow}
+              >
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  color scheme switcher
+                </Text>
+                <Ionicons
+                  name={
+                    features.colorSchemeToggleEnabled
+                      ? "checkbox"
+                      : "square-outline"
+                  }
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  updateFeatures({
+                    bodyCareEnabled: !features.bodyCareEnabled,
+                  })
+                }
+                style={styles.studioRow}
+              >
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  razor blade tracker
+                </Text>
+                <Ionicons
+                  name={features.bodyCareEnabled ? "checkbox" : "square-outline"}
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  updateFeatures({
+                    moodStarsEnabled: !features.moodStarsEnabled,
+                  })
+                }
+                style={styles.studioRow}
+              >
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  mood star ratings
+                </Text>
+                <Ionicons
+                  name={features.moodStarsEnabled ? "checkbox" : "square-outline"}
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  updateFeatures({
+                    commentsEnabled: !features.commentsEnabled,
+                  })
+                }
+                style={styles.studioRow}
+              >
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  day notes / comments
+                </Text>
+                <Ionicons
+                  name={features.commentsEnabled ? "checkbox" : "square-outline"}
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  updateFeatures({
+                    gridPickerEnabled: !features.gridPickerEnabled,
+                  })
+                }
+                style={styles.studioRow}
+              >
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  flexible grid picker
+                </Text>
+                <Ionicons
+                  name={features.gridPickerEnabled ? "checkbox" : "square-outline"}
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              {/* Reset Button */}
+              <View style={{ marginTop: 20 }}>
+                <Pressable
+                  onPress={() => setResetConfirmVisible(true)}
+                  style={[
+                    styles.dialogButton,
+                    { backgroundColor: colors.backgroundElement },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.dialogButtonText,
+                      { color: colors.text, fontFamily: resolveFont("bold") },
+                    ]}
+                  >
+                    reset appearance to defaults
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Confirmation Dialog for Reset */}
       <ConfirmDialog
-        visible={resetThemeConfirmVisible}
+        visible={resetConfirmVisible}
         message={
           mode === "baked"
             ? "Reset all appearance settings back to baked build defaults?"
             : "Reset all appearance settings back to vanilla defaults?"
         }
         onConfirm={handleResetThemeConfirm}
-        onCancel={() => setResetThemeConfirmVisible(false)}
+        onCancel={() => setResetConfirmVisible(false)}
       />
 
+      {/* Info Dialog */}
       <Modal
         visible={infoDialog.visible}
         transparent

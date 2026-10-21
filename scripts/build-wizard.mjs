@@ -88,12 +88,14 @@ async function run() {
   let mode = args.mode || "dynamic";
   let appName = args.name || "";
   let packageId = args.packageId || "";
+  let colorSchemeToggleEnabled = args.colorSchemeToggle !== undefined ? args.colorSchemeToggle !== "false" : true;
   let bodyCareEnabled = args.bodyCare !== undefined ? args.bodyCare !== "false" : true;
   let moodStarsEnabled = args.moodStars !== undefined ? args.moodStars !== "false" : true;
   let commentsEnabled = args.comments !== undefined ? args.comments !== "false" : true;
   let gridPickerEnabled = args.gridPicker !== undefined ? args.gridPicker !== "false" : true;
   let themeChoice = args.theme || "default";
   let fontPath = args.font || null;
+  let fontNameChoice = args.fontName || null;
   let calendarBgPath = args.calendarBg || null;
   let settingsBgPath = args.settingsBg || null;
 
@@ -139,6 +141,9 @@ async function run() {
     packageId = (await rl.question(`Package ID [${defaultPackage}]: `)).trim() || defaultPackage;
 
     console.log("\n--- Feature Toggles ---");
+    const qSchemeToggle = (await rl.question("Enable color scheme switcher? [Y/n]: ")).trim().toLowerCase();
+    colorSchemeToggleEnabled = qSchemeToggle !== "n" && qSchemeToggle !== "no";
+
     const qBodyCare = (await rl.question("Enable razor blade tracker? [y/N/Y]: ")).trim().toLowerCase();
     bodyCareEnabled = qBodyCare !== "n" && qBodyCare !== "no";
 
@@ -164,8 +169,17 @@ async function run() {
       const palMap = { "1": "default", "2": "cyberpunk", "3": "mocha", "4": "matcha", "5": "twilight" };
       themeChoice = palMap[palInput] || "default";
 
-      const fPath = (await rl.question("Path to custom .ttf/.otf font file (or empty for Redaction): ")).trim();
-      if (fPath) fontPath = fPath;
+      console.log("\nTypography:");
+      console.log("  1) Redaction (Default)");
+      console.log("  2) Comic Sans");
+      console.log("  3) Custom .ttf/.otf file path\n");
+      const fontOpt = (await rl.question("Select font [1-3] (default: 1): ")).trim();
+      if (fontOpt === "2") {
+        fontNameChoice = "ComicSans";
+      } else if (fontOpt === "3") {
+        const fPath = (await rl.question("Path to custom .ttf/.otf font file: ")).trim();
+        if (fPath) fontPath = fPath;
+      }
 
       const calBg = (await rl.question("Path to calendar background image (optional): ")).trim();
       if (calBg) calendarBgPath = calBg;
@@ -208,6 +222,11 @@ async function run() {
       dataUriOrPath: destFont,
     };
     console.log(`[build-wizard] Copied font to: ${destFont}`);
+  } else if (fontNameChoice) {
+    bakedFont = {
+      name: fontNameChoice,
+      dataUriOrPath: null,
+    };
   }
 
   const calendarBase64 = imageFileToBase64DataUri(calendarBgPath);
@@ -222,6 +241,7 @@ async function run() {
     appName,
     packageId,
     features: {
+      colorSchemeToggleEnabled,
       bodyCareEnabled,
       moodStarsEnabled,
       commentsEnabled,
@@ -239,6 +259,7 @@ async function run() {
         settings: settingsBase64,
       },
       features: {
+        colorSchemeToggleEnabled,
         bodyCareEnabled,
         moodStarsEnabled,
         commentsEnabled,
