@@ -461,6 +461,17 @@ async function run() {
     console.log(`[build-wizard] Updated ${BUILD_GRADLE_PATH} with applicationId: '${packageId}'`);
   }
 
+  try {
+    const bundleOutputDir = path.join(ROOT_DIR, "android/app/build/generated/assets/react/release");
+    const assetsOutputDir = path.join(ROOT_DIR, "android/app/build/intermediates/assets/release");
+    if (fs.existsSync(bundleOutputDir)) {
+      fs.rmSync(bundleOutputDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(assetsOutputDir)) {
+      fs.rmSync(assetsOutputDir, { recursive: true, force: true });
+    }
+  } catch {}
+
   console.log("\n=======================================================");
   console.log("   BUILD CONFIGURATION APPLIED SUCCESSFULLY!");
   console.log(`   Mode:        ${mode}`);
