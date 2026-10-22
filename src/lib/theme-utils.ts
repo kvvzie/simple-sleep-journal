@@ -208,7 +208,7 @@ export function isThemeModifiedFromDefaults(
   const defaultSetBg = targetDefault.backgrounds?.settings || null;
   if (currentSetBg !== defaultSetBg) return true;
 
-  const targetFeatures: FeatureFlags =
+  const targetFeatures: Partial<FeatureFlags> =
     mode === "baked"
       ? (bakedFeatures || bakedTheme.features || DEFAULT_FEATURE_FLAGS)
       : {
