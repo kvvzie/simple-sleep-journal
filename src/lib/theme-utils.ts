@@ -184,6 +184,8 @@ export function isThemeModifiedFromDefaults(
   mode: BuildMode,
   theme: AppTheme,
   bakedTheme: AppTheme,
+  currentFeatures?: Partial<FeatureFlags>,
+  bakedFeatures?: FeatureFlags,
 ): boolean {
   const targetDefault = mode === "baked" ? bakedTheme : DEFAULT_THEME;
   const currentDark = theme.palette?.dark || {};
@@ -205,6 +207,48 @@ export function isThemeModifiedFromDefaults(
   const currentSetBg = theme.backgrounds?.settings || null;
   const defaultSetBg = targetDefault.backgrounds?.settings || null;
   if (currentSetBg !== defaultSetBg) return true;
+
+  const targetFeatures: FeatureFlags =
+    mode === "baked"
+      ? (bakedFeatures || bakedTheme.features || DEFAULT_FEATURE_FLAGS)
+      : {
+          ...DEFAULT_FEATURE_FLAGS,
+          inAppCustomizationEnabled: mode === "dynamic",
+        };
+
+  const activeFeatures = currentFeatures || theme.features;
+  if (activeFeatures) {
+    if (
+      activeFeatures.bodyCareEnabled !== undefined &&
+      activeFeatures.bodyCareEnabled !== targetFeatures.bodyCareEnabled
+    ) {
+      return true;
+    }
+    if (
+      activeFeatures.moodStarsEnabled !== undefined &&
+      activeFeatures.moodStarsEnabled !== targetFeatures.moodStarsEnabled
+    ) {
+      return true;
+    }
+    if (
+      activeFeatures.commentsEnabled !== undefined &&
+      activeFeatures.commentsEnabled !== targetFeatures.commentsEnabled
+    ) {
+      return true;
+    }
+    if (
+      activeFeatures.gridPickerEnabled !== undefined &&
+      activeFeatures.gridPickerEnabled !== targetFeatures.gridPickerEnabled
+    ) {
+      return true;
+    }
+    if (
+      activeFeatures.colorSchemeToggleEnabled !== undefined &&
+      activeFeatures.colorSchemeToggleEnabled !== targetFeatures.colorSchemeToggleEnabled
+    ) {
+      return true;
+    }
+  }
 
   return false;
 }

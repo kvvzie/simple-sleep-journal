@@ -398,7 +398,7 @@ Wrapping a `ScrollView` inside a parent `Pressable` overlay causes touch dispatc
 In React Native Android standalone builds, `DocumentPicker` returns Storage Access Framework URIs (`content://...`) or cache file URIs (`file://...`). React Native's JS networking stack delegates `fetch()` to OkHttp, which strictly supports `http` and `https` schemes; attempting to `fetch("file://...")` or `fetch("content://...")` immediately throws `MalformedURLException: unknown protocol`. To resolve this natively, `readTextFileFromUri()` in `src/lib/file-saver.ts` utilizes `readAsStringAsync` from `expo-file-system/legacy`, which bridges directly to Android's native `ContentResolver.openInputStream(uri)`, providing 100% reliable UTF-8 reading across any Android document provider.
 
 ### 8.8 Why the Appearance Reset Button Uses Mode-Aware Baseline Comparisons
-In `default` mode, the baseline is `DEFAULT_THEME` (monochrome, Redaction font). In `baked` mode, the baseline is `buildConfig.bakedTheme` (custom palette, custom font, embedded wallpaper). If the reset button only checked whether custom colors or fonts existed, a freshly installed `baked` app would incorrectly show the reset arrow immediately. `isThemeModifiedFromDefaults` checks against the mode's own default baseline: in `baked` mode, the undo arrow is hidden until the user imports an external `.moodtheme` different from their baked build.
+In `default` mode, the baseline is `DEFAULT_THEME` (monochrome, Redaction font) along with `DEFAULT_FEATURE_FLAGS` (`bodyCareEnabled: false`, `moodStarsEnabled: true`, `commentsEnabled: true`, `gridPickerEnabled: true`). In `baked` mode, the baseline is `buildConfig.bakedTheme` and `buildConfig.features`. If an imported `.moodtheme` file changes only feature toggles (such as activating the razor blade tracker or disabling stars) without modifying colors, `isThemeModifiedFromDefaults` detects the feature deviation against the baseline flags and immediately surfaces the undo/reset arrow button in Settings. Clicking reset cleanly restores the mode's default feature flags and appearance.
 
 ### 8.9 Storage Key Versioning and `isCustomImported` Flag Lifecycle
 `AppearanceProvider` persists state to `sleepinapp.appearance_${buildConfig.mode}_v4`. To prevent stale AsyncStorage caches from overriding freshly baked compile-time themes across APK upgrades, `baked` mode checks `isCustomImported`: unless the user explicitly imported an external `.moodtheme`, `baked` mode always initializes to `buildConfig.bakedTheme`. When a custom theme is imported, `isCustomImported: true` is persisted; when "Reset Appearance" is triggered, the key is removed, restoring the baked baseline.
@@ -452,10 +452,20 @@ cp -f android/app/build/outputs/apk/release/app-release.apk ../apks/mood-journal
 
 # 3. Baked Mode
 cd ..
-node scripts/build-wizard.mjs --mode=baked --name="mood journal (baked)" --packageId="com.shittyassapps.sleepinapp.baked" --bodyCare=false --theme=playful --fontName=ComicSans --calendarBg="assets/images/custom-cat-bg.png"
+node scripts/build-wizard.mjs --mode=baked --name="mood journal (baked)" --packageId="com.shittyassapps.sleepinapp.baked" --bodyCare=false --theme=playful --fontName=ComicSans --calendar-bg="assets/images/custom-cat-bg.png" --settings-bg=none
 cd android && ./gradlew assembleRelease --max-workers=3 -PreactNativeArchitectures=arm64-v8a
 cp -f android/app/build/outputs/apk/release/app-release.apk ../apks/mood-journal-baked.apk
 
 # 4. Install all 3 side-by-side to device
 cd .. && ./scripts/install-all.sh
 ```
+
+### 9.5 Build Wizard CLI Reference (`scripts/build-wizard.mjs`)
+Running `node scripts/build-wizard.mjs --help` displays full flag documentation. All parameters can be passed as CLI arguments:
+- **Modes**: `--mode=<default|baked|dynamic>`
+- **Identity**: `--name="<App Name>"`, `--package-id="<package.id>"`
+- **Feature Flags**: `--body-care=<true|false>`, `--mood-stars=<true|false>`, `--comments=<true|false>`, `--grid-picker=<true|false>`, `--color-scheme-toggle=<true|false>`
+- **Color Hexes (Dark)**: `--bg=<hex>`, `--text=<hex>`, `--element=<hex>`, `--selected=<hex>`, `--secondary=<hex>`
+- **Color Hexes (Light)**: `--light-bg=<hex>`, `--light-text=<hex>`, `--light-element=<hex>`, `--light-selected=<hex>`, `--light-secondary=<hex>`
+- **Typography**: `--font-name=<Redaction|ComicSans>`, `--font-path=<path/to/font.ttf>`
+- **Separate Background Images**: `--calendar-bg=<path|none>`, `--settings-bg=<path|none>` (calendar and settings backgrounds are separately configured and optimized)

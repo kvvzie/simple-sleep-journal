@@ -182,6 +182,34 @@ describe("Theme & Appearance Utilities", () => {
       font: { name: "ComicSans" },
     };
     assert.equal(isThemeModifiedFromDefaults("default", modifiedDefault, bakedBaseline), true);
+
+    const defaultWithSelfHarm: AppTheme = {
+      ...DEFAULT_THEME,
+      features: { bodyCareEnabled: true },
+    };
+    assert.equal(
+      isThemeModifiedFromDefaults(
+        "default",
+        defaultWithSelfHarm,
+        bakedBaseline,
+        defaultWithSelfHarm.features,
+      ),
+      true,
+    );
+
+    const defaultWithStarsDisabled: AppTheme = {
+      ...DEFAULT_THEME,
+      features: { moodStarsEnabled: false },
+    };
+    assert.equal(
+      isThemeModifiedFromDefaults(
+        "default",
+        defaultWithStarsDisabled,
+        bakedBaseline,
+        defaultWithStarsDisabled.features,
+      ),
+      true,
+    );
   });
 
   it("resolveFontFamily falls back to Redaction weights or respects custom font", () => {

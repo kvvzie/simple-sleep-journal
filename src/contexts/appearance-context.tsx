@@ -140,8 +140,14 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   }, [scheme, theme.palette]);
 
   const isModified = useMemo(() => {
-    return isThemeModifiedFromDefaults(buildConfig.mode, theme, buildConfig.bakedTheme);
-  }, [theme]);
+    return isThemeModifiedFromDefaults(
+      buildConfig.mode,
+      theme,
+      buildConfig.bakedTheme,
+      effectiveFeatures,
+      buildConfig.features,
+    );
+  }, [theme, effectiveFeatures]);
 
   const resolveFont = useCallback(
     (variant: FontVariant) => {

@@ -74,19 +74,144 @@ const PALETTES = {
 
 function parseArgs() {
   const args = {};
-  for (const arg of process.argv.slice(2)) {
-    if (arg.startsWith("--")) {
-      const eq = arg.indexOf("=");
+  for (const rawArg of process.argv.slice(2)) {
+    if (rawArg.startsWith("--")) {
+      const eq = rawArg.indexOf("=");
       if (eq > 0) {
-        const key = arg.slice(2, eq);
-        const val = arg.slice(eq + 1);
+        const key = rawArg.slice(2, eq);
+        const val = rawArg.slice(eq + 1);
         args[key] = val;
       } else {
-        args[arg.slice(2)] = true;
+        args[rawArg.slice(2)] = true;
       }
+    } else if (rawArg.startsWith("-")) {
+      args[rawArg.slice(1)] = true;
     }
   }
   return args;
+}
+
+function getArg(args, ...keys) {
+  for (const k of keys) {
+    if (args[k] !== undefined) return args[k];
+    const kebab = k.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+    if (args[kebab] !== undefined) return args[kebab];
+  }
+  return undefined;
+}
+
+function getBoolArg(args, defaultValue, ...keys) {
+  for (const k of keys) {
+    const val = getArg(args, k);
+    if (val !== undefined) {
+      if (typeof val === "boolean") return val;
+      const s = String(val).trim().toLowerCase();
+      if (s === "true" || s === "1" || s === "y" || s === "yes") return true;
+      if (s === "false" || s === "0" || s === "n" || s === "no") return false;
+    }
+    const noKey = "no-" + k.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
+    if (args[noKey] !== undefined) return false;
+  }
+  return defaultValue;
+}
+
+function printHelp() {
+  console.log(`
+======================================================================
+   SIMPLE SLEEP JOURNAL - BUILD WIZARD CLI REFERENCE
+======================================================================
+
+Usage:
+  node scripts/build-wizard.mjs [options]
+
+Modes:
+  --mode=<default|baked|dynamic> (alias: -m)
+      default  - Vanilla minimal Redaction styling, no Appearance Studio
+      baked    - Compile-time custom theme, branding and features baked into build
+      dynamic  - Full in-app customization (Appearance Studio with magic wand)
+
+App Identity:
+  --name="<AppName>"          (alias: --app-name, --appName)
+                              Display name shown in Android launcher and title
+  --package-id="<PackageId>"  (alias: --packageId, --pkg)
+                              Android applicationId (e.g. com.shittyassapps.sleepinapp.baked)
+
+Feature Toggles:
+  --body-care=<true|false>           (alias: --bodyCare, --blades, --razor-blades, --no-blades)
+                                     Enable razor blade self-harm tracker (default: dynamic=true, baked/default=false)
+  --mood-stars=<true|false>          (alias: --moodStars, --stars, --no-stars)
+                                     Enable 1-10 star ratings on daily logs (default: true)
+  --comments=<true|false>            (alias: --comments, --notes, --daily-comments, --no-comments)
+                                     Enable daily text notes and comments (default: true)
+  --grid-picker=<true|false>         (alias: --gridPicker, --grid, --flexible-grid, --no-grid-picker)
+                                     Enable flexible rows/cols stepper in settings (default: true)
+  --color-scheme-toggle=<true|false> (alias: --colorSchemeToggle, --scheme-toggle, --no-color-scheme-toggle)
+                                     Enable dark/light appearance switcher (default: true)
+
+Baked Theme & Color Palette Presets:
+  --theme=<preset>                   (alias: --palette)
+      playful   - Electric purple (#1E0538), neon yellow (#FFE600), pink (#FF70C5)
+      cyberpunk - Neon cyan (#00FFCC) on deep dark (#090A0F)
+      mocha     - Warm coffee tones (#1C1714 / #F5E2CF)
+      matcha    - Forest green accents (#101813 / #CBE8D0)
+      twilight  - Deep lavender & purple (#18121E / #F1D2FF)
+      default   - Classic monochrome
+      custom    - Custom hex palette configured via flags
+
+Dark Mode / Base Color Hex Flags:
+  --color-bg=<#hex>         (alias: --bg, --background, --colorBg)
+                            Main background color
+  --color-text=<#hex>       (alias: --text, --colorText)
+                            Primary text and logged calendar day color
+  --color-element=<#hex>    (alias: --element, --colorElement, --card, --card-bg)
+                            Card / dialog / element background color
+  --color-selected=<#hex>   (alias: --selected, --colorSelected, --accent, --colorAccent)
+                            Selected cell / accent highlight color
+  --color-secondary=<#hex>  (alias: --secondary, --colorSecondary, --text-secondary, --textSecondary)
+                            Muted secondary text and unlogged day color
+
+Light Mode Color Hex Flags:
+  --light-bg=<#hex>         (alias: --lightBg, --color-light-bg)
+                            Light mode background color
+  --light-text=<#hex>       (alias: --lightText, --color-light-text)
+                            Light mode primary text color
+  --light-element=<#hex>    (alias: --lightElement, --color-light-element, --light-card)
+                            Light mode element / card background color
+  --light-selected=<#hex>   (alias: --lightSelected, --color-light-selected, --light-accent)
+                            Light mode selected / accent color
+  --light-secondary=<#hex>  (alias: --lightSecondary, --color-light-secondary, --light-text-secondary)
+                            Light mode muted secondary text color
+
+Typography & Custom Fonts:
+  --font-name=<name>        (alias: --fontName)
+                            Pre-bundled font: "Redaction" or "ComicSans"
+  --font-path=<path>        (alias: --fontPath, --font, --custom-font)
+                            File path to custom .ttf or .otf font file
+
+Background Images (Divided into 2 separate options for Calendar and Settings):
+  --calendar-bg=<path|none> (alias: --calendarBg, --calendar-image, --calendarImage)
+                            File path to calendar screen wallpaper (set "none" to disable)
+  --settings-bg=<path|none> (alias: --settingsBg, --settings-image, --settingsImage)
+                            File path to settings screen wallpaper (set "none" to disable)
+
+Help & Miscellaneous:
+  -h, --help                Display this manual and exit
+  --non-interactive         (alias: --ci)
+                            Run without interactive prompts (defaults to interactive only if 0 flags given)
+
+Examples:
+  # 1. Custom baked build with custom hex colors, Comic Sans and cat calendar wallpaper:
+  node scripts/build-wizard.mjs --mode=baked --name="Cat Journal" \\
+    --bg="#1E0538" --text="#FFE600" --element="#6B1D99" --selected="#00FF99" --secondary="#FF70C5" \\
+    --font-name=ComicSans --calendar-bg="assets/images/custom-cat-bg.png" --settings-bg=none
+
+  # 2. Vanilla default build without razor blades tracker:
+  node scripts/build-wizard.mjs --mode=default --body-care=false
+
+  # 3. Dynamic build with all features enabled:
+  node scripts/build-wizard.mjs --mode=dynamic --body-care=true --grid-picker=true
+======================================================================
+`);
 }
 
 function imageFileToBase64DataUri(filePath) {
@@ -112,43 +237,121 @@ function imageFileToBase64DataUri(filePath) {
 
 async function run() {
   const args = parseArgs();
+  if (
+    args.help ||
+    args.h ||
+    process.argv.includes("--help") ||
+    process.argv.includes("-h") ||
+    process.argv[2] === "help"
+  ) {
+    printHelp();
+    process.exit(0);
+  }
+
   const isInteractive = Object.keys(args).length === 0;
 
-  let mode = args.mode || "dynamic";
-  let appName = args.name || "";
-  let packageId = args.packageId || "";
-  let colorSchemeToggleEnabled =
-    args.colorSchemeToggle !== undefined
-      ? args.colorSchemeToggle !== "false"
-      : true;
-  let bodyCareEnabled =
-    args.bodyCare !== undefined
-      ? args.bodyCare !== "false"
-      : mode === "dynamic"
-        ? true
-        : false;
-  let moodStarsEnabled =
-    args.moodStars !== undefined ? args.moodStars !== "false" : true;
-  let commentsEnabled =
-    args.comments !== undefined ? args.comments !== "false" : true;
-  let gridPickerEnabled =
-    args.gridPicker !== undefined ? args.gridPicker !== "false" : true;
-  let themeChoice = args.theme || (mode === "baked" ? "playful" : "default");
-  let fontPath = args.font || null;
-  let fontNameChoice =
-    args.fontName || (mode === "baked" ? "ComicSans" : null);
-  let calendarBgPath =
-    args.calendarBg ||
-    (mode === "baked"
-      ? path.join(ROOT_DIR, "assets/images/custom-cat-bg.png")
-      : null);
-  let settingsBgPath =
-    args.settingsBg ||
-    (mode === "baked"
-      ? path.join(ROOT_DIR, "assets/images/custom-cat-bg.png")
-      : null);
+  let mode = getArg(args, "mode", "m") || "dynamic";
+  let appName = getArg(args, "appName", "app-name", "name") || "";
+  let packageId = getArg(args, "packageId", "package-id", "pkg", "package") || "";
+
+  let colorSchemeToggleEnabled = getBoolArg(
+    args,
+    true,
+    "colorSchemeToggle",
+    "color-scheme-toggle",
+    "schemeToggle",
+    "scheme-toggle",
+  );
+  let bodyCareEnabled = getBoolArg(
+    args,
+    mode === "dynamic",
+    "bodyCare",
+    "body-care",
+    "blades",
+    "razorBlades",
+    "razor-blades",
+  );
+  let moodStarsEnabled = getBoolArg(args, true, "moodStars", "mood-stars", "stars");
+  let commentsEnabled = getBoolArg(
+    args,
+    true,
+    "comments",
+    "notes",
+    "dailyComments",
+    "daily-comments",
+  );
+  let gridPickerEnabled = getBoolArg(
+    args,
+    true,
+    "gridPicker",
+    "grid-picker",
+    "grid",
+    "flexibleGrid",
+    "flexible-grid",
+  );
+
+  let themeChoice =
+    getArg(args, "theme", "palette") || (mode === "baked" ? "playful" : "default");
+
+  let fontPath = getArg(args, "fontPath", "font-path", "customFont", "custom-font") || null;
+  let fontNameChoice = getArg(args, "fontName", "font-name", "font") || (mode === "baked" ? "ComicSans" : null);
+  if (fontPath && !fontNameChoice) {
+    fontNameChoice = path.parse(fontPath).name;
+  }
+
+  let calArg = getArg(args, "calendarBg", "calendar-bg", "calendarImage", "calendar-image");
+  let calendarBgPath = null;
+  if (calArg !== undefined) {
+    if (calArg !== "none" && calArg !== "null" && calArg !== "false") {
+      calendarBgPath = path.isAbsolute(calArg) ? calArg : path.resolve(ROOT_DIR, calArg);
+    }
+  } else if (mode === "baked") {
+    calendarBgPath = path.join(ROOT_DIR, "assets/images/custom-cat-bg.png");
+  }
+
+  let setArg = getArg(args, "settingsBg", "settings-bg", "settingsImage", "settings-image");
+  let settingsBgPath = null;
+  if (setArg !== undefined) {
+    if (setArg !== "none" && setArg !== "null" && setArg !== "false") {
+      settingsBgPath = path.isAbsolute(setArg) ? setArg : path.resolve(ROOT_DIR, setArg);
+    }
+  }
+
   let customColors = null;
   let customColorsLight = null;
+
+  const bgHex = getArg(args, "bg", "colorBg", "color-bg", "background", "colorBackground", "color-background");
+  const textHex = getArg(args, "text", "colorText", "color-text");
+  const elemHex = getArg(args, "element", "colorElement", "color-element", "card", "cardBg", "card-bg");
+  const selHex = getArg(args, "selected", "colorSelected", "color-selected", "accent", "colorAccent", "color-accent");
+  const secHex = getArg(args, "secondary", "colorSecondary", "color-secondary", "textSecondary", "text-secondary");
+
+  if (bgHex || textHex || elemHex || selHex || secHex) {
+    themeChoice = "custom";
+    customColors = {
+      background: bgHex || "#1E0538",
+      text: textHex || "#FFE600",
+      backgroundElement: elemHex || "#6B1D99",
+      backgroundSelected: selHex || "#00FF99",
+      textSecondary: secHex || "#FF70C5",
+    };
+  }
+
+  const lightBgHex = getArg(args, "lightBg", "light-bg", "colorLightBg", "color-light-bg", "lightBackground");
+  const lightTextHex = getArg(args, "lightText", "light-text", "colorLightText", "color-light-text");
+  const lightElemHex = getArg(args, "lightElement", "light-element", "colorLightElement", "color-light-element", "lightCard", "light-card");
+  const lightSelHex = getArg(args, "lightSelected", "light-selected", "colorLightSelected", "color-light-selected", "lightAccent", "light-accent");
+  const lightSecHex = getArg(args, "lightSecondary", "light-secondary", "lightTextSecondary", "light-text-secondary");
+
+  if (lightBgHex || lightTextHex || lightElemHex || lightSelHex || lightSecHex) {
+    customColorsLight = {
+      background: lightBgHex || "#FFF5FA",
+      text: lightTextHex || "#5A009D",
+      backgroundElement: lightElemHex || "#FFE0F0",
+      backgroundSelected: lightSelHex || "#00E5FF",
+      textSecondary: lightSecHex || "#FF1493",
+    };
+  }
 
   if (isInteractive) {
     const rl = readline.createInterface({
@@ -257,14 +460,25 @@ async function run() {
         fontNameChoice = "ComicSans";
       } else if (fontOpt === "3") {
         const fPath = (await rl.question("Path to custom .ttf/.otf font file: ")).trim();
-        if (fPath) fontPath = fPath;
+        if (fPath) {
+          fontPath = path.isAbsolute(fPath) ? fPath : path.resolve(process.cwd(), fPath);
+        }
       }
 
-      const calBg = (await rl.question("Path to calendar background image (optional): ")).trim();
-      if (calBg) calendarBgPath = calBg;
+      console.log("\nBackground Images (Calendar & Settings):");
+      const calBg = (await rl.question("Path to calendar background image [optional, default: cat]: ")).trim();
+      if (calBg) {
+        calendarBgPath = calBg === "none" ? null : (path.isAbsolute(calBg) ? calBg : path.resolve(process.cwd(), calBg));
+      } else {
+        calendarBgPath = path.join(ROOT_DIR, "assets/images/custom-cat-bg.png");
+      }
 
-      const setBg = (await rl.question("Path to settings background image (optional): ")).trim();
-      if (setBg) settingsBgPath = setBg;
+      const setBg = (await rl.question("Path to settings background image [optional, default: none]: ")).trim();
+      if (setBg && setBg !== "none") {
+        settingsBgPath = path.isAbsolute(setBg) ? setBg : path.resolve(process.cwd(), setBg);
+      } else {
+        settingsBgPath = null;
+      }
     }
 
     rl.close();
@@ -335,13 +549,22 @@ async function run() {
     }
   }
 
-  if (args.bg || args.text || args.element || args.selected || args.textSecondary) {
+  if (bgHex || textHex || elemHex || selHex || secHex) {
     if (!selectedPalette.dark) selectedPalette.dark = {};
-    if (args.bg) selectedPalette.dark.background = args.bg;
-    if (args.text) selectedPalette.dark.text = args.text;
-    if (args.element) selectedPalette.dark.backgroundElement = args.element;
-    if (args.selected) selectedPalette.dark.backgroundSelected = args.selected;
-    if (args.textSecondary) selectedPalette.dark.textSecondary = args.textSecondary;
+    if (bgHex) selectedPalette.dark.background = bgHex;
+    if (textHex) selectedPalette.dark.text = textHex;
+    if (elemHex) selectedPalette.dark.backgroundElement = elemHex;
+    if (selHex) selectedPalette.dark.backgroundSelected = selHex;
+    if (secHex) selectedPalette.dark.textSecondary = secHex;
+  }
+
+  if (lightBgHex || lightTextHex || lightElemHex || lightSelHex || lightSecHex) {
+    if (!selectedPalette.light) selectedPalette.light = {};
+    if (lightBgHex) selectedPalette.light.background = lightBgHex;
+    if (lightTextHex) selectedPalette.light.text = lightTextHex;
+    if (lightElemHex) selectedPalette.light.backgroundElement = lightElemHex;
+    if (lightSelHex) selectedPalette.light.backgroundSelected = lightSelHex;
+    if (lightSecHex) selectedPalette.light.textSecondary = lightSecHex;
   }
 
   const inAppCustomizationEnabled = mode === "dynamic";
