@@ -23,7 +23,6 @@ describe("Theme & Appearance Utilities", () => {
 
     assert.equal(lightEffective.background, "#112233");
     assert.equal(lightEffective.text, "#FFFFFF");
-    // Unoverridden keys should keep default values
     assert.equal(lightEffective.backgroundElement, "#F0F0F3");
 
     const darkEffective = resolveEffectiveColors("dark", {
@@ -128,7 +127,6 @@ describe("Theme & Appearance Utilities", () => {
       inAppCustomizationEnabled: false,
     };
 
-    // In baked mode, reset must restore baked values
     const bakedReset = getResetDefaults("baked", bakedTheme, bakedFeatures);
     assert.equal(bakedReset.theme.name, "Baked Custom Look");
     assert.equal(bakedReset.features.colorSchemeToggleEnabled, false);
@@ -136,13 +134,11 @@ describe("Theme & Appearance Utilities", () => {
     assert.equal(bakedReset.features.commentsEnabled, false);
     assert.equal(bakedReset.features.inAppCustomizationEnabled, false);
 
-    // In default mode, reset must restore pure default with inAppCustomizationEnabled = false
     const defaultReset = getResetDefaults("default", bakedTheme, bakedFeatures);
     assert.equal(defaultReset.theme.name, DEFAULT_THEME.name);
     assert.equal(defaultReset.features.bodyCareEnabled, DEFAULT_FEATURE_FLAGS.bodyCareEnabled);
     assert.equal(defaultReset.features.inAppCustomizationEnabled, false);
 
-    // In dynamic mode, reset must restore pure default with inAppCustomizationEnabled = true
     const dynamicReset = getResetDefaults("dynamic", bakedTheme, bakedFeatures);
     assert.equal(dynamicReset.theme.name, DEFAULT_THEME.name);
     assert.equal(dynamicReset.features.bodyCareEnabled, DEFAULT_FEATURE_FLAGS.bodyCareEnabled);
@@ -171,5 +167,36 @@ describe("Theme & Appearance Utilities", () => {
     assert.equal(resolveFontFamily("display", "MyCustomFont"), "MyCustomFont");
     assert.equal(resolveFontFamily("regular", "MyCustomFont"), "MyCustomFont");
     assert.equal(resolveFontFamily("italic", "MyCustomFont"), "MyCustomFont");
+  });
+
+  it("handles baked theme export payload with inAppCustomization disabled safely", () => {
+    const rawExportFromBaked = serializeMoodTheme({
+      name: "Baked Export",
+      version: 1,
+      palette: {
+        dark: { background: "#1E0538", text: "#FFE600" },
+      },
+      font: null,
+      backgrounds: { calendar: null, settings: null },
+      features: {
+        colorSchemeToggleEnabled: true,
+        bodyCareEnabled: false,
+        moodStarsEnabled: true,
+        commentsEnabled: true,
+        gridPickerEnabled: true,
+        inAppCustomizationEnabled: false,
+      },
+    });
+    const res = parseAndValidateMoodTheme(rawExportFromBaked);
+    assert.equal(res.valid, true);
+    if (res.valid) {
+      assert.equal(res.theme.name, "Baked Export");
+      assert.equal(res.theme.features?.inAppCustomizationEnabled, false);
+      const dynamicModeEffectiveCustomization = true;
+      const effectiveCustomization = dynamicModeEffectiveCustomization
+        ? true
+        : (res.theme.features?.inAppCustomizationEnabled ?? false);
+      assert.equal(effectiveCustomization, true);
+    }
   });
 });

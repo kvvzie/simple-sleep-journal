@@ -137,8 +137,9 @@ export const styles = StyleSheet.create({
   studioModalContainer: {
     width: "100%",
     maxWidth: 420,
-    maxHeight: "88%",
+    height: "88%",
     borderRadius: 22,
+    borderWidth: 1,
     padding: 20,
   },
   studioModalHeader: {

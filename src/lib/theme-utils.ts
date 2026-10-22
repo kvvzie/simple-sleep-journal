@@ -54,9 +54,13 @@ export function parseAndValidateMoodTheme(
   }
 
   const raw = input as Record<string, unknown>;
+  const target =
+    raw.format === THEME_FORMAT_IDENTIFIER && raw.theme && typeof raw.theme === "object"
+      ? (raw.theme as Record<string, unknown>)
+      : raw;
 
   if (raw.format !== THEME_FORMAT_IDENTIFIER) {
-    if (!raw.palette && !raw.backgrounds && !raw.font) {
+    if (!target.palette && !target.backgrounds && !target.font) {
       return {
         valid: false,
         error: "Unrecognized theme format: missing required theme structure",
@@ -64,11 +68,14 @@ export function parseAndValidateMoodTheme(
     }
   }
 
-  const name = typeof raw.name === "string" && raw.name.trim().length > 0 ? raw.name : "Imported Theme";
+  const name =
+    typeof target.name === "string" && target.name.trim().length > 0
+      ? target.name
+      : "Imported Theme";
   const palette: ThemePalette = {};
 
-  if (raw.palette && typeof raw.palette === "object") {
-    const rawPalette = raw.palette as Record<string, unknown>;
+  if (target.palette && typeof target.palette === "object") {
+    const rawPalette = target.palette as Record<string, unknown>;
     if (rawPalette.light && typeof rawPalette.light === "object") {
       palette.light = rawPalette.light as Partial<ThemePaletteColors>;
     }
@@ -78,8 +85,8 @@ export function parseAndValidateMoodTheme(
   }
 
   let font: AppTheme["font"] = null;
-  if (raw.font && typeof raw.font === "object") {
-    const rawFont = raw.font as Record<string, unknown>;
+  if (target.font && typeof target.font === "object") {
+    const rawFont = target.font as Record<string, unknown>;
     if (typeof rawFont.name === "string" && rawFont.name.trim().length > 0) {
       font = {
         name: rawFont.name.trim(),
@@ -93,8 +100,8 @@ export function parseAndValidateMoodTheme(
     settings: null,
   };
 
-  if (raw.backgrounds && typeof raw.backgrounds === "object") {
-    const rawBg = raw.backgrounds as Record<string, unknown>;
+  if (target.backgrounds && typeof target.backgrounds === "object") {
+    const rawBg = target.backgrounds as Record<string, unknown>;
     if (typeof rawBg.calendarBase64 === "string") {
       backgrounds.calendar = rawBg.calendarBase64;
     } else if (typeof rawBg.calendar === "string") {
@@ -109,8 +116,8 @@ export function parseAndValidateMoodTheme(
   }
 
   const features: Partial<FeatureFlags> = {};
-  if (raw.features && typeof raw.features === "object") {
-    const rawFeat = raw.features as Record<string, unknown>;
+  if (target.features && typeof target.features === "object") {
+    const rawFeat = target.features as Record<string, unknown>;
     if (typeof rawFeat.colorSchemeToggleEnabled === "boolean") {
       features.colorSchemeToggleEnabled = rawFeat.colorSchemeToggleEnabled;
     }

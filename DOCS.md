@@ -343,17 +343,30 @@ node scripts/build-wizard.mjs
 # or via npm script
 npm run wizard
 
-# Headless / Automated CLI Flag Mode
+# Headless / Automated CLI Flag Mode with Custom Hex Colors
 node scripts/build-wizard.mjs \
   --mode=baked \
   --name="mood journal (baked)" \
   --packageId="com.shittyassapps.sleepinapp.baked" \
-  --theme=cyberpunk \
   --bodyCare=false \
+  --bg="#1E0538" \
+  --text="#FFE600" \
+  --element="#6B1D99" \
+  --selected="#00FF99" \
+  --textSecondary="#FF70C5" \
   --calendarBg="assets/images/custom-cat-bg.png"
 ```
 
-### 7.2 Files Modified by the Wizard
+### 7.2 Custom Hex Color Input
+The build wizard provides direct custom hex color entry as Option 1 in interactive mode:
+- Background hex (e.g. `#1E0538`)
+- Text hex (e.g. `#FFE600`)
+- Card / element background hex (e.g. `#6B1D99`)
+- Selected accent hex (e.g. `#00FF99`)
+- Secondary / muted text hex (e.g. `#FF70C5`)
+It also accepts CLI parameters `--bg`, `--text`, `--element`, `--selected`, `--textSecondary` for fully automated CI/CD builds.
+
+### 7.3 Files Modified by the Wizard
 1. **`src/constants/build-config.json`**: Compiles the mode, feature flags, and baked theme into the JavaScript bundle.
 2. **`app.json`**: Updates `expo.name`, `expo.scheme`, and `expo.android.package`.
 3. **`android/app/build.gradle`**: Updates `defaultConfig.applicationId` to ensure the APK installs side-by-side with other packages.
@@ -374,6 +387,12 @@ If a user installs a branded or personalized APK (e.g. `mood journal (baked)` wi
 
 ### 8.4 Why `.moodtheme` Embeds Images as Base64
 Referencing local filesystem paths (e.g. `/sdcard/Download/photo.jpg`) makes theme files non-portable. If a user shares a theme file or restores it on a new phone, local file paths break. Embedding background graphics as base64 data URIs ensures the theme file is 100% self-contained and renders identically anywhere.
+
+### 8.5 Why Dynamic Mode Strictly Protects In-App Customization
+When importing a theme exported from a `baked` build (which naturally has `inAppCustomizationEnabled: false`), a `dynamic` mode application MUST sanitize and force `inAppCustomizationEnabled: true`. Failing to do so would lock the user out of the Appearance Studio until an explicit reset. In `dynamic` mode, the magic wand and live customization tools are guaranteed to always remain active.
+
+### 8.6 Why Modals Separate Backdrops from Scrollable Dialogs
+Wrapping a `ScrollView` inside a parent `Pressable` overlay causes touch dispatch conflicts on Android, leading to stuttering or hijacked scroll gestures. By separating the backdrop into an absolute-positioned `Pressable` behind a non-pressable `View` dialog container with an explicit `height: "88%"` and `style={{ flex: 1 }}` on the `ScrollView`, native Android fling and momentum scrolling operate smoothly.
 
 ---
 

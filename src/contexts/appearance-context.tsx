@@ -83,10 +83,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
             setFeatures((prev) => ({
               ...prev,
               ...parsed.features,
-              inAppCustomizationEnabled:
-                buildConfig.mode === "dynamic"
-                  ? (parsed.features.inAppCustomizationEnabled ?? true)
-                  : false,
+              inAppCustomizationEnabled: buildConfig.mode === "dynamic",
             }));
           }
         } catch {}
@@ -118,10 +115,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     return {
       ...features,
       ...(theme.features || {}),
-      inAppCustomizationEnabled:
-        buildConfig.mode === "dynamic"
-          ? (features.inAppCustomizationEnabled ?? true)
-          : false,
+      inAppCustomizationEnabled: buildConfig.mode === "dynamic",
     };
   }, [features, theme.features]);
 
@@ -147,6 +141,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     setFeatures((prev) => ({
       ...prev,
       ...partial,
+      inAppCustomizationEnabled: buildConfig.mode === "dynamic",
     }));
   }, []);
 
@@ -276,11 +271,22 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       } catch {}
     }
 
-    setTheme(importedTheme);
-    if (importedTheme.features) {
+    const safeTheme: AppTheme = {
+      ...importedTheme,
+      features: importedTheme.features
+        ? {
+            ...importedTheme.features,
+            inAppCustomizationEnabled: buildConfig.mode === "dynamic",
+          }
+        : undefined,
+    };
+
+    setTheme(safeTheme);
+    if (safeTheme.features) {
       setFeatures((prev) => ({
         ...prev,
-        ...importedTheme.features,
+        ...safeTheme.features,
+        inAppCustomizationEnabled: buildConfig.mode === "dynamic",
       }));
     }
 

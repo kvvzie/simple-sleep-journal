@@ -61,14 +61,18 @@ node scripts/build-wizard.mjs
 npm run wizard
 ```
 
-### Headless / Automated Build Flags
+### Headless / Automated Build Flags (with custom hex colors)
 ```bash
 node scripts/build-wizard.mjs \
   --mode=baked \
   --name="mood journal (baked)" \
   --packageId="com.shittyassapps.sleepinapp.baked" \
-  --theme=twilight \
   --bodyCare=false \
+  --bg="#1E0538" \
+  --text="#FFE600" \
+  --element="#6B1D99" \
+  --selected="#00FF99" \
+  --textSecondary="#FF70C5" \
   --calendarBg="assets/images/custom-cat-bg.png" \
   --settingsBg="assets/images/custom-cat-bg.png"
 ```

@@ -28,6 +28,7 @@ import {
   PanResponder,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -852,7 +853,6 @@ function Settings() {
         </View>
       </ScrollView>
 
-      {/* Export Format Dialog */}
       <Modal
         visible={exportFormatDialogVisible}
         transparent
@@ -947,7 +947,6 @@ function Settings() {
         </Pressable>
       </Modal>
 
-      {/* Import Choice Dialog */}
       <Modal
         visible={importChoiceDialogVisible}
         transparent
@@ -1008,7 +1007,6 @@ function Settings() {
         </Pressable>
       </Modal>
 
-      {/* Export Setup / Details Dialog */}
       <Modal
         visible={exportType !== null}
         transparent
@@ -1207,23 +1205,28 @@ function Settings() {
         </Pressable>
       </Modal>
 
-      {/* Appearance Studio Modal */}
       <Modal
         visible={studioModalVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setStudioModalVisible(false)}
       >
-        <Pressable
-          style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
-          onPress={() => setStudioModalVisible(false)}
-        >
+        <View style={styles.overlay}>
           <Pressable
             style={[
-              styles.studioModalContainer,
-              { backgroundColor: colors.modalBackground },
+              StyleSheet.absoluteFill,
+              { backgroundColor: colors.modalOverlay },
             ]}
-            onPress={() => {}}
+            onPress={() => setStudioModalVisible(false)}
+          />
+          <View
+            style={[
+              styles.studioModalContainer,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.textSecondary,
+              },
+            ]}
           >
             <View
               style={[
@@ -1248,6 +1251,7 @@ function Settings() {
             </View>
 
             <ScrollView
+              style={{ flex: 1 }}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled={true}
@@ -1826,11 +1830,10 @@ function Settings() {
                 </Pressable>
               </View>
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
-      {/* Confirmation Dialog for Reset */}
       <ConfirmDialog
         visible={resetConfirmVisible}
         message={
@@ -1842,7 +1845,6 @@ function Settings() {
         onCancel={() => setResetConfirmVisible(false)}
       />
 
-      {/* Info Dialog */}
       <Modal
         visible={infoDialog.visible}
         transparent

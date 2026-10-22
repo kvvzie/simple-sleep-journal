@@ -147,6 +147,8 @@ async function run() {
     (mode === "baked"
       ? path.join(ROOT_DIR, "assets/images/custom-cat-bg.png")
       : null);
+  let customColors = null;
+  let customColorsLight = null;
 
   if (isInteractive) {
     const rl = readline.createInterface({
@@ -193,8 +195,8 @@ async function run() {
     const qSchemeToggle = (await rl.question("Enable color scheme switcher? [Y/n]: ")).trim().toLowerCase();
     colorSchemeToggleEnabled = qSchemeToggle !== "n" && qSchemeToggle !== "no";
 
-    const qBodyCare = (await rl.question("Enable razor blade tracker? [y/N/Y]: ")).trim().toLowerCase();
-    bodyCareEnabled = qBodyCare !== "n" && qBodyCare !== "no";
+    const qBodyCare = (await rl.question("Enable razor blade tracker? [y/N]: ")).trim().toLowerCase();
+    bodyCareEnabled = qBodyCare === "y" || qBodyCare === "yes";
 
     const qMoodStars = (await rl.question("Enable mood star ratings? [Y/n]: ")).trim().toLowerCase();
     moodStarsEnabled = qMoodStars !== "n" && qMoodStars !== "no";
@@ -207,16 +209,44 @@ async function run() {
 
     if (mode === "baked") {
       console.log("\n--- Baked Appearance Customization ---");
-      console.log("Available color palettes:");
-      console.log("  1) default   - Classic monochrome");
-      console.log("  2) cyberpunk - Neon cyan on dark");
-      console.log("  3) mocha     - Warm coffee tones");
-      console.log("  4) matcha    - Forest green accents");
-      console.log("  5) twilight  - Deep lavender & purple\n");
+      console.log("Color palette configuration:");
+      console.log("  1) Custom hex colors (type your own hex codes)");
+      console.log("  2) Playful   - Electric purple, yellow & pink");
+      console.log("  3) Cyberpunk - Neon cyan on dark");
+      console.log("  4) Mocha     - Warm coffee tones");
+      console.log("  5) Matcha    - Forest green accents");
+      console.log("  6) Twilight  - Deep lavender & purple");
+      console.log("  7) Default   - Classic monochrome\n");
 
-      const palInput = (await rl.question("Select palette [1-5] (default: 1): ")).trim();
-      const palMap = { "1": "default", "2": "cyberpunk", "3": "mocha", "4": "matcha", "5": "twilight" };
-      themeChoice = palMap[palInput] || "default";
+      const palInput = (await rl.question("Select color source [1-7] (default: 1): ")).trim();
+      const palMap = {
+        "2": "playful",
+        "3": "cyberpunk",
+        "4": "mocha",
+        "5": "matcha",
+        "6": "twilight",
+        "7": "default",
+      };
+
+      if (palMap[palInput]) {
+        themeChoice = palMap[palInput];
+      } else {
+        themeChoice = "custom";
+        console.log("\nEnter hex colors (press Enter for suggested vibrant defaults):");
+        const bg = (await rl.question("Background color hex [#1E0538]: ")).trim() || "#1E0538";
+        const txt = (await rl.question("Text color hex [#FFE600]: ")).trim() || "#FFE600";
+        const elem = (await rl.question("Card / element background hex [#6B1D99]: ")).trim() || "#6B1D99";
+        const sel = (await rl.question("Selected accent hex [#00FF99]: ")).trim() || "#00FF99";
+        const sec = (await rl.question("Secondary / muted text hex [#FF70C5]: ")).trim() || "#FF70C5";
+
+        customColors = {
+          background: bg,
+          text: txt,
+          backgroundElement: elem,
+          backgroundSelected: sel,
+          textSecondary: sec,
+        };
+      }
 
       console.log("\nTypography:");
       console.log("  1) Redaction (Default)");
@@ -281,7 +311,38 @@ async function run() {
   const calendarBase64 = imageFileToBase64DataUri(calendarBgPath);
   const settingsBase64 = imageFileToBase64DataUri(settingsBgPath);
 
-  const selectedPalette = PALETTES[themeChoice] || {};
+  let selectedPalette = PALETTES[themeChoice]
+    ? JSON.parse(JSON.stringify(PALETTES[themeChoice]))
+    : {};
+  if (customColors) {
+    selectedPalette = {
+      dark: {
+        background: customColors.background,
+        text: customColors.text,
+        backgroundElement: customColors.backgroundElement,
+        backgroundSelected: customColors.backgroundSelected,
+        textSecondary: customColors.textSecondary,
+      },
+    };
+    if (customColorsLight) {
+      selectedPalette.light = {
+        background: customColorsLight.background,
+        text: customColorsLight.text,
+        backgroundElement: customColorsLight.backgroundElement,
+        backgroundSelected: customColorsLight.backgroundSelected,
+        textSecondary: customColorsLight.textSecondary,
+      };
+    }
+  }
+
+  if (args.bg || args.text || args.element || args.selected || args.textSecondary) {
+    if (!selectedPalette.dark) selectedPalette.dark = {};
+    if (args.bg) selectedPalette.dark.background = args.bg;
+    if (args.text) selectedPalette.dark.text = args.text;
+    if (args.element) selectedPalette.dark.backgroundElement = args.element;
+    if (args.selected) selectedPalette.dark.backgroundSelected = args.selected;
+    if (args.textSecondary) selectedPalette.dark.textSecondary = args.textSecondary;
+  }
 
   const inAppCustomizationEnabled = mode === "dynamic";
 
