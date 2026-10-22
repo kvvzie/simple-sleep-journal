@@ -1,8 +1,17 @@
 import { File, Paths } from "expo-file-system";
-import { EncodingType, StorageAccessFramework } from "expo-file-system/legacy";
+import { readAsStringAsync, EncodingType, StorageAccessFramework } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform, TurboModuleRegistry } from "react-native";
+
+export async function readTextFileFromUri(uri: string): Promise<string> {
+  try {
+    return await readAsStringAsync(uri, { encoding: EncodingType.UTF8 });
+  } catch {
+    const res = await fetch(uri);
+    return await res.text();
+  }
+}
 
 export type SaveFileOptions = {
   fileName: string;

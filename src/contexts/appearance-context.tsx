@@ -1,12 +1,13 @@
 import { buildConfig } from "@/constants/build-config";
 import { DEFAULT_FEATURE_FLAGS, DEFAULT_THEME } from "@/constants/default-theme";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
-import { saveFileToDevice } from "@/lib/file-saver";
+import { readTextFileFromUri, saveFileToDevice } from "@/lib/file-saver";
 import {
   FontVariant,
   getResetDefaults,
   isThemeExportAllowed,
   isThemeImportAllowed,
+  isThemeModifiedFromDefaults,
   parseAndValidateMoodTheme,
   resolveEffectiveColors,
   resolveFontFamily,
@@ -29,6 +30,7 @@ type AppearanceContextType = {
   mode: BuildMode;
   canExportTheme: boolean;
   canImportTheme: boolean;
+  isModified: boolean;
   colors: ThemePaletteColors;
   theme: AppTheme;
   features: FeatureFlags;
@@ -51,7 +53,7 @@ type AppearanceContextType = {
 };
 
 const AppearanceContext = createContext<AppearanceContextType | null>(null);
-const STORAGE_KEY = `sleepinapp.appearance_${buildConfig.mode}_v3`;
+const STORAGE_KEY = `sleepinapp.appearance_${buildConfig.mode}_v4`;
 
 export function AppearanceProvider({ children }: { children: React.ReactNode }) {
   const scheme = useAppColorScheme();
@@ -72,7 +74,11 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
           const parsed = JSON.parse(raw);
           const validation = parseAndValidateMoodTheme(parsed.theme);
           if (validation.valid) {
-            setTheme(validation.theme);
+            if (buildConfig.mode === "baked" && !parsed.isCustomImported) {
+              setTheme(buildConfig.bakedTheme);
+            } else {
+              setTheme(validation.theme);
+            }
             if (validation.theme.font?.name && validation.theme.font?.dataUriOrPath) {
               Font.loadAsync({
                 [validation.theme.font.name]: validation.theme.font.dataUriOrPath,
@@ -102,13 +108,23 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (!loaded) return;
-    AsyncStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        theme,
-        features,
-      }),
-    ).catch(() => {});
+    AsyncStorage.getItem(STORAGE_KEY).then((existing) => {
+      let isCustomImported = false;
+      if (existing) {
+        try {
+          const p = JSON.parse(existing);
+          isCustomImported = Boolean(p.isCustomImported);
+        } catch {}
+      }
+      AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          theme,
+          features,
+          isCustomImported,
+        }),
+      ).catch(() => {});
+    });
   }, [theme, features, loaded]);
 
   const effectiveFeatures: FeatureFlags = useMemo(() => {
@@ -122,6 +138,10 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   const colors = useMemo(() => {
     return resolveEffectiveColors(scheme, theme.palette);
   }, [scheme, theme.palette]);
+
+  const isModified = useMemo(() => {
+    return isThemeModifiedFromDefaults(buildConfig.mode, theme, buildConfig.bakedTheme);
+  }, [theme]);
 
   const resolveFont = useCallback(
     (variant: FontVariant) => {
@@ -290,13 +310,22 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       }));
     }
 
+    await AsyncStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        theme: safeTheme,
+        features: safeTheme.features || features,
+        isCustomImported: true,
+      }),
+    ).catch(() => {});
+
     return { success: true };
-  }, []);
+  }, [features]);
 
   const importThemeFromFile = useCallback(async () => {
     try {
       const pickerRes = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
+        type: ["application/json", "text/*", "*/*"],
         copyToCacheDirectory: true,
       });
 
@@ -305,8 +334,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       }
 
       const fileUri = pickerRes.assets[0].uri;
-      const res = await fetch(fileUri);
-      const text = await res.text();
+      const text = await readTextFileFromUri(fileUri);
       const parsed = JSON.parse(text);
 
       return await importThemeData(parsed);
@@ -321,6 +349,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       mode: buildConfig.mode,
       canExportTheme: isThemeExportAllowed(buildConfig.mode),
       canImportTheme: isThemeImportAllowed(buildConfig.mode),
+      isModified,
       colors,
       theme,
       features: effectiveFeatures,
@@ -338,6 +367,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
       importThemeFromFile,
     }),
     [
+      isModified,
       colors,
       theme,
       effectiveFeatures,

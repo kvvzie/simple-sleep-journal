@@ -180,6 +180,35 @@ export function isThemeImportAllowed(_mode: BuildMode): boolean {
   return true;
 }
 
+export function isThemeModifiedFromDefaults(
+  mode: BuildMode,
+  theme: AppTheme,
+  bakedTheme: AppTheme,
+): boolean {
+  const targetDefault = mode === "baked" ? bakedTheme : DEFAULT_THEME;
+  const currentDark = theme.palette?.dark || {};
+  const currentLight = theme.palette?.light || {};
+  const defaultDark = targetDefault.palette?.dark || {};
+  const defaultLight = targetDefault.palette?.light || {};
+
+  if (JSON.stringify(currentDark) !== JSON.stringify(defaultDark)) return true;
+  if (JSON.stringify(currentLight) !== JSON.stringify(defaultLight)) return true;
+
+  const currentFont = theme.font?.name || null;
+  const defaultFont = targetDefault.font?.name || null;
+  if (currentFont !== defaultFont) return true;
+
+  const currentCalBg = theme.backgrounds?.calendar || null;
+  const defaultCalBg = targetDefault.backgrounds?.calendar || null;
+  if (currentCalBg !== defaultCalBg) return true;
+
+  const currentSetBg = theme.backgrounds?.settings || null;
+  const defaultSetBg = targetDefault.backgrounds?.settings || null;
+  if (currentSetBg !== defaultSetBg) return true;
+
+  return false;
+}
+
 export type FontVariant = "display" | "title" | "bold" | "regular" | "italic";
 
 export function resolveFontFamily(

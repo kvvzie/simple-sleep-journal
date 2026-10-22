@@ -394,6 +394,15 @@ When importing a theme exported from a `baked` build (which naturally has `inApp
 ### 8.6 Why Modals Separate Backdrops from Scrollable Dialogs
 Wrapping a `ScrollView` inside a parent `Pressable` overlay causes touch dispatch conflicts on Android, leading to stuttering or hijacked scroll gestures. By separating the backdrop into an absolute-positioned `Pressable` behind a non-pressable `View` dialog container with an explicit `height: "88%"` and `style={{ flex: 1 }}` on the `ScrollView`, native Android fling and momentum scrolling operate smoothly.
 
+### 8.7 Why SAF Content URI Reading Requires Native FileSystem instead of `fetch()`
+In React Native Android standalone builds, `DocumentPicker` returns Storage Access Framework URIs (`content://...`) or cache file URIs (`file://...`). React Native's JS networking stack delegates `fetch()` to OkHttp, which strictly supports `http` and `https` schemes; attempting to `fetch("file://...")` or `fetch("content://...")` immediately throws `MalformedURLException: unknown protocol`. To resolve this natively, `readTextFileFromUri()` in `src/lib/file-saver.ts` utilizes `readAsStringAsync` from `expo-file-system/legacy`, which bridges directly to Android's native `ContentResolver.openInputStream(uri)`, providing 100% reliable UTF-8 reading across any Android document provider.
+
+### 8.8 Why the Appearance Reset Button Uses Mode-Aware Baseline Comparisons
+In `default` mode, the baseline is `DEFAULT_THEME` (monochrome, Redaction font). In `baked` mode, the baseline is `buildConfig.bakedTheme` (custom palette, custom font, embedded wallpaper). If the reset button only checked whether custom colors or fonts existed, a freshly installed `baked` app would incorrectly show the reset arrow immediately. `isThemeModifiedFromDefaults` checks against the mode's own default baseline: in `baked` mode, the undo arrow is hidden until the user imports an external `.moodtheme` different from their baked build.
+
+### 8.9 Storage Key Versioning and `isCustomImported` Flag Lifecycle
+`AppearanceProvider` persists state to `sleepinapp.appearance_${buildConfig.mode}_v4`. To prevent stale AsyncStorage caches from overriding freshly baked compile-time themes across APK upgrades, `baked` mode checks `isCustomImported`: unless the user explicitly imported an external `.moodtheme`, `baked` mode always initializes to `buildConfig.bakedTheme`. When a custom theme is imported, `isCustomImported: true` is persisted; when "Reset Appearance" is triggered, the key is removed, restoring the baked baseline.
+
 ---
 
 ## 9. Testing, Verification & Build Guide
@@ -403,8 +412,8 @@ Tests use Node.js native test runner with zero external test runner overhead:
 ```bash
 npm test
 ```
-- Tests all pure utilities in `tests/`: body care calculations, grid row height clamping, date calendar generators, CSV escaping, theme validation, and reset behavior.
-- Runs in ~80ms.
+- Tests all pure utilities in `tests/`: body care calculations, grid row height clamping, date calendar generators, CSV escaping, theme validation, baseline comparison, and reset behavior.
+- Runs in ~100ms.
 
 ### 9.2 TypeScript Type Checking
 ```bash
@@ -421,8 +430,32 @@ export ANDROID_HOME=$HOME/Android/Sdk
 cd android && ./gradlew assembleDebug
 
 # Compile Standalone Release APK
-cd android && ./gradlew assembleRelease -x lint
+cd android && ./gradlew assembleRelease --max-workers=3 -PreactNativeArchitectures=arm64-v8a
 ```
 The compiled APK will be output to:
 - Debug: `android/app/build/outputs/apk/debug/app-debug.apk`
 - Release: `android/app/build/outputs/apk/release/app-release.apk`
+
+### 9.4 Multi-Build Standalone Generation & Installation
+To build and install all 3 dev modes side-by-side on a connected Android phone without touching production `com.shittyassapps.sleepinapp`:
+```bash
+# 1. Default Mode
+node scripts/build-wizard.mjs --mode=default --name="mood journal (default)" --packageId="com.shittyassapps.sleepinapp.default" --bodyCare=false
+cd android && ./gradlew assembleRelease --max-workers=3 -PreactNativeArchitectures=arm64-v8a
+cp -f android/app/build/outputs/apk/release/app-release.apk ../apks/mood-journal-default.apk
+
+# 2. Dynamic Mode
+cd ..
+node scripts/build-wizard.mjs --mode=dynamic --name="mood journal (dynamic)" --packageId="com.shittyassapps.sleepinapp.dynamic" --bodyCare=true
+cd android && ./gradlew assembleRelease --max-workers=3 -PreactNativeArchitectures=arm64-v8a
+cp -f android/app/build/outputs/apk/release/app-release.apk ../apks/mood-journal-dynamic.apk
+
+# 3. Baked Mode
+cd ..
+node scripts/build-wizard.mjs --mode=baked --name="mood journal (baked)" --packageId="com.shittyassapps.sleepinapp.baked" --bodyCare=false --theme=playful --fontName=ComicSans --calendarBg="assets/images/custom-cat-bg.png"
+cd android && ./gradlew assembleRelease --max-workers=3 -PreactNativeArchitectures=arm64-v8a
+cp -f android/app/build/outputs/apk/release/app-release.apk ../apks/mood-journal-baked.apk
+
+# 4. Install all 3 side-by-side to device
+cd .. && ./scripts/install-all.sh
+```

@@ -12,7 +12,7 @@ import {
   importBackup,
   importLogs,
 } from "@/lib/db";
-import { saveFileToDevice } from "@/lib/file-saver";
+import { readTextFileFromUri, saveFileToDevice } from "@/lib/file-saver";
 import { ThemePaletteColors } from "@/types/appearance";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -52,6 +52,7 @@ function Settings() {
   const {
     mode,
     canExportTheme,
+    isModified,
     colors,
     theme,
     features,
@@ -464,7 +465,7 @@ function Settings() {
     setImportChoiceDialogVisible(false);
     try {
       const pickerRes = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
+        type: ["application/json", "text/*", "*/*"],
         copyToCacheDirectory: true,
       });
 
@@ -473,8 +474,7 @@ function Settings() {
       }
 
       const fileUri = pickerRes.assets[0].uri;
-      const response = await fetch(fileUri);
-      const content = await response.text();
+      const content = await readTextFileFromUri(fileUri);
       const parsed = JSON.parse(content);
 
       if (Array.isArray(parsed)) {
@@ -519,14 +519,6 @@ function Settings() {
     DeviceEventEmitter.emit("refreshCalendarGrid");
   };
 
-  const isThemeModified = Boolean(
-    (theme.palette?.light && Object.keys(theme.palette.light).length > 0) ||
-    (theme.palette?.dark && Object.keys(theme.palette.dark).length > 0) ||
-    (theme.font?.name && theme.font.name !== "Redaction") ||
-    theme.backgrounds?.calendar ||
-    theme.backgrounds?.settings
-  );
-
   return (
     <View
       style={[
@@ -544,7 +536,7 @@ function Settings() {
         >
           <Ionicons name="color-wand-outline" size={24} color={colors.text} />
         </Pressable>
-      ) : isThemeModified ? (
+      ) : isModified ? (
         <Pressable
           onPress={() => setResetConfirmVisible(true)}
           hitSlop={16}

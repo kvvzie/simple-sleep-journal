@@ -7,6 +7,7 @@ import {
   getResetDefaults,
   isThemeExportAllowed,
   isThemeImportAllowed,
+  isThemeModifiedFromDefaults,
   resolveFontFamily,
 } from "../src/lib/theme-utils.ts";
 import { DEFAULT_FEATURE_FLAGS, DEFAULT_THEME } from "../src/constants/default-theme.ts";
@@ -155,6 +156,32 @@ describe("Theme & Appearance Utilities", () => {
     assert.equal(isThemeImportAllowed("default"), true);
     assert.equal(isThemeImportAllowed("baked"), true);
     assert.equal(isThemeImportAllowed("dynamic"), true);
+  });
+
+  it("isThemeModifiedFromDefaults identifies deviations from mode-specific baselines", () => {
+    const bakedBaseline: AppTheme = {
+      name: "Baked Look",
+      version: 1,
+      palette: { dark: { background: "#1E0538", text: "#FFE600" } },
+      font: { name: "ComicSans" },
+      backgrounds: { calendar: "data:image/jpeg;base64,CAT", settings: null },
+    };
+
+    assert.equal(isThemeModifiedFromDefaults("baked", bakedBaseline, bakedBaseline), false);
+
+    const modifiedBaked: AppTheme = {
+      ...bakedBaseline,
+      palette: { dark: { background: "#000000", text: "#FFFFFF" } },
+    };
+    assert.equal(isThemeModifiedFromDefaults("baked", modifiedBaked, bakedBaseline), true);
+
+    assert.equal(isThemeModifiedFromDefaults("default", DEFAULT_THEME, bakedBaseline), false);
+
+    const modifiedDefault: AppTheme = {
+      ...DEFAULT_THEME,
+      font: { name: "ComicSans" },
+    };
+    assert.equal(isThemeModifiedFromDefaults("default", modifiedDefault, bakedBaseline), true);
   });
 
   it("resolveFontFamily falls back to Redaction weights or respects custom font", () => {
