@@ -57,12 +57,13 @@ simple-sleep-journal/
 │   │   ├── confirm-dialog/              # Modal confirmation dialogs
 │   │   ├── nav-bar/                     # Bottom animated navigation bar
 │   │   ├── settings/                    # Settings view, Appearance Studio, export/import
-│   │   ├── sleep-modal/                 # Daily logging modal, hours wheel, stars, body care
+│   │   ├── sleep-modal/                 # Daily logging modal, hours wheel, stars, body care, to-do list
+│   │   ├── to-discuss/                  # Weekly discussion topics view placeholder
 │   │   └── wheel-picker/                # Virtualized cyclical wheel picker
 │   ├── constants/                       # Theme defaults, build configs, grid constants
 │   ├── contexts/                        # React Context providers (Appearance, Settings, Nav)
 │   ├── hooks/                           # Custom utility hooks (Color scheme resolution)
-│   ├── lib/                             # Core library utilities (Database, SAF File Saver, Theme)
+│   ├── lib/                             # Core library utilities (Database, Exports, SAF File Saver, Theme)
 │   └── types/                           # TypeScript interfaces and type definitions
 └── tests/                               # Native unit test suites
 ```
@@ -107,6 +108,16 @@ erDiagram
         text amounts_json "Quadrant usage counts JSON"
         string updated_at "ISO-8601 Timestamp"
     }
+    TODO_TASKS {
+        string id PK "Unique task identifier"
+        text title "Task title"
+        string created_date "YYYY-MM-DD"
+        string expires_date "YYYY-MM-DD (created_date + 3d)"
+        string created_at "ISO-8601 Timestamp"
+        string updated_at "ISO-8601 Timestamp"
+        string completed_date "YYYY-MM-DD or null"
+        string completed_at "ISO-8601 Timestamp or null"
+    }
 
     SLEEP_LOGS ||--o{ SLEEP_LOG_EDITS : "has audit history"
     SLEEP_LOGS ||--o| BODY_CARE_LOGS : "has optional body care log"
@@ -116,6 +127,7 @@ erDiagram
 1. **`sleep_logs`**: Primary log table storing hours slept, mood rating (scaled 1-10), daily notes, `logged` flag, and audit timestamps (`logged_at`, `updated_at`). The primary key is the ISO date (`YYYY-MM-DD`).
 2. **`sleep_log_edits`**: Full chronological audit trail. Whenever a user edits an existing log entry, a row is inserted documenting exactly which fields changed, the previous values, and the new values, indexed on `log_date` with a unique `(log_date, edit_index)` index.
 3. **`body_care_logs`**: Optional tracking quadrant for self-harm / razor blade usage. Records the product brand ID (e.g. `astra-superior-platinum`, `gillette-platinum`, `isana-men-classic`), a serialized JSON map of uses per quadrant (`top-left`, `top-right`, `bottom-left`, `bottom-right`), and `updated_at`.
+4. **`todo_tasks`**: Multi-day to-do tasks with stable string `id`, `created_date`, `expires_date` (`created_date + 3` days), and optional `completed_date`/`completed_at`. Unfinished tasks remain visible through `expires_date`; completed tasks remain visible through `completed_date` and hide on subsequent days. Adding or completing a task also marks that day as logged in `CalendarGrid`, and deleting day `D` removes tasks created on `D` while reverting completion for tasks completed on `D`.
 
 ### 3.3 Operation Queue & Handle Recovery
 On application startup, `initDB()` opens `sleepinapp.db`, creates missing tables and indexes idempotently (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`), and checks `PRAGMA table_info(sleep_logs)` to add `logged_at` if missing.
@@ -253,7 +265,9 @@ The Settings screen maintains full author attribution and typography credits for
 ### 6.2 `SleepModal` (`src/components/sleep-modal/`)
 - **File Structure**:
   - `sleep-modal.tsx`: Interactive bottom-sheet modal.
-  - `sleep-modal.styles.ts`: Modal overlays, hours column, star spacing, quadrant button geometry.
+  - `sleep-modal.styles.ts`: Modal overlays, hours column, star spacing, quadrant button geometry, and centered to-do list rows.
+  - `todo-list-section.tsx`: Centered to-do list section (`to do list` header, inline `+ new task` add flow, wrapping multiline inline title editor preserving hourglass/timestamp/trash actions, Redaction 35 Regular titles and Redaction 35 Italic elapsed timestamps, Feather `edit-2` icon, and `ConfirmDialog` delete prompts).
+  - `todo.utils.ts`: Pure helpers for 3-day carry-over visibility, chronological sorting, elapsed hour formatting (`(<1 hours ago)` up to `(>96 hours ago)`), and backup import sanitization.
 - **Gestural Dismissal**: Built with `PanResponder` to track downward drag velocity. Dismisses smoothly if downward drag exceeds 90px.
 - **Hours Cyclical Wheel Picker**: Infinite scrolling vertical wheel picker cycling seamlessly from 0h to 24h.
 - **10-Star Mood Rating**: Interactive touch-and-drag scrubbing. Moving a finger across the star row computes localized X-offsets and updates the rating in real-time.
@@ -261,7 +275,7 @@ The Settings screen maintains full author attribution and typography credits for
   - 4 distinct clickable quadrants (`top-left`, `top-right`, `bottom-left`, `bottom-right`).
   - Brand blade overlays for Astra, Gillette, and Isana blades.
   - Numeric usage counters per quadrant.
-- **Feature Flag Responsiveness**: When `features.bodyCareEnabled`, `features.moodStarsEnabled`, or `features.commentsEnabled` are toggled off, their respective UI sections are unmounted, and database saving omits those fields.
+- **Feature Flag Responsiveness**: When `features.bodyCareEnabled`, `features.moodStarsEnabled`, `features.commentsEnabled`, or `features.todoListEnabled` are toggled off, their respective UI sections are unmounted.
 
 ### 6.3 `Settings` (`src/components/settings/`)
 - **File Structure**:
@@ -293,7 +307,8 @@ The Settings screen maintains full author attribution and typography credits for
 
 ### 6.4 `NavBar` (`src/components/nav-bar/`)
 - **File Structure**:
-  - `nav-bar.tsx`: Bottom navigation bar with spring-animated icons.
+  - `nav-bar.tsx`: Bottom navigation bar with spring-animated icons and dynamic 2-tab (`calendar`, `settings`) or 3-tab (`calendar`, `to discuss`, `settings`) support.
+  - `reading-mode-mobile-icon.tsx`: Pure-view vector icon matching Fluent UI `reading-mode-mobile-24-o` / `-24-f`.
   - `nav-bar.styles.ts`: Positioning, clearance constants, and translucent container styling.
 - **Spring Animations**: Animated springs smoothly enlarge the active tab icon (1.18x scale) with stiffness 340 and damping 18.
 - **Horizontal Swipe Detection**: Embedded `PanResponder` allows horizontal swiping anywhere on the navigation bar to transition between the Calendar and Settings tabs.
@@ -455,7 +470,7 @@ cd .. && ./scripts/install-all.sh
 Running `node scripts/build-wizard.mjs --help` displays full flag documentation. All parameters can be passed as CLI arguments:
 - **Modes**: `--mode=<default|baked|dynamic>`
 - **Identity**: `--name="<App Name>"`, `--package-id="<package.id>"`
-- **Feature Flags**: `--body-care=<true|false>`, `--mood-stars=<true|false>`, `--comments=<true|false>`, `--grid-picker=<true|false>`, `--color-scheme-toggle=<true|false>`
+- **Feature Flags**: `--body-care=<true|false>`, `--mood-stars=<true|false>`, `--comments=<true|false>`, `--todo-list=<true|false>`, `--to-discuss-toggle=<true|false>`, `--to-discuss-default=<true|false>`, `--grid-picker=<true|false>`, `--color-scheme-toggle=<true|false>`
 - **Color Hexes (Dark)**: `--bg=<hex>`, `--text=<hex>`, `--element=<hex>`, `--selected=<hex>`, `--secondary=<hex>`
 - **Color Hexes (Light)**: `--light-bg=<hex>`, `--light-text=<hex>`, `--light-element=<hex>`, `--light-selected=<hex>`, `--light-secondary=<hex>`
 - **Typography**: `--font-name=<Redaction|ComicSans>`, `--font-path=<path/to/font.ttf>`

@@ -143,6 +143,12 @@ Feature Toggles:
                                      Enable 1-10 star ratings on daily logs (default: true)
   --comments=<true|false>            (alias: --comments, --notes, --daily-comments, --no-comments)
                                      Enable daily text notes and comments (default: true)
+  --todo-list=<true|false>           (alias: --todoList, --todos, --todo, --no-todo-list)
+                                     Enable to-do list with 3-day carryover (default: true)
+  --to-discuss-toggle=<true|false>   (alias: --toDiscussToggle, --no-to-discuss-toggle)
+                                     Show "to discuss" switch in Settings (default: true)
+  --to-discuss-default=<true|false>  (alias: --toDiscussDefault, --toDiscuss, --to-discuss)
+                                     Enable/disable the "to discuss" nav tab by default (default: true)
   --grid-picker=<true|false>         (alias: --gridPicker, --grid, --flexible-grid, --no-grid-picker)
                                      Enable flexible rows/cols stepper in settings (default: true)
   --color-scheme-toggle=<true|false> (alias: --colorSchemeToggle, --scheme-toggle, --no-color-scheme-toggle)
@@ -280,6 +286,28 @@ async function run() {
     "dailyComments",
     "daily-comments",
   );
+  let todoListEnabled = getBoolArg(
+    args,
+    true,
+    "todoList",
+    "todo-list",
+    "todos",
+    "todo",
+  );
+  let toDiscussToggleEnabled = getBoolArg(
+    args,
+    true,
+    "toDiscussToggle",
+    "to-discuss-toggle",
+  );
+  let toDiscussDefaultEnabled = getBoolArg(
+    args,
+    true,
+    "toDiscussDefault",
+    "to-discuss-default",
+    "toDiscuss",
+    "to-discuss",
+  );
   let gridPickerEnabled = getBoolArg(
     args,
     true,
@@ -406,6 +434,16 @@ async function run() {
 
     const qComments = (await rl.question("Enable daily comments / notes? [Y/n]: ")).trim().toLowerCase();
     commentsEnabled = qComments !== "n" && qComments !== "no";
+
+    const qTodoList = (await rl.question("Enable to-do list? [Y/n]: ")).trim().toLowerCase();
+    todoListEnabled = qTodoList !== "n" && qTodoList !== "no";
+
+    const qToDiscussToggle = (await rl.question('Show "to discuss" switch in Settings? [Y/n]: ')).trim().toLowerCase();
+    toDiscussToggleEnabled = qToDiscussToggle !== "n" && qToDiscussToggle !== "no";
+    if (!toDiscussToggleEnabled) {
+      const qToDiscussDefault = (await rl.question('Enable "to discuss" tab when locked? [Y/n]: ')).trim().toLowerCase();
+      toDiscussDefaultEnabled = qToDiscussDefault !== "n" && qToDiscussDefault !== "no";
+    }
 
     const qGrid = (await rl.question("Enable flexible grid size picker? [Y/n]: ")).trim().toLowerCase();
     gridPickerEnabled = qGrid !== "n" && qGrid !== "no";
@@ -578,6 +616,9 @@ async function run() {
       bodyCareEnabled,
       moodStarsEnabled,
       commentsEnabled,
+      todoListEnabled,
+      toDiscussToggleEnabled,
+      toDiscussDefaultEnabled,
       gridPickerEnabled,
       inAppCustomizationEnabled,
     },
@@ -596,6 +637,9 @@ async function run() {
         bodyCareEnabled,
         moodStarsEnabled,
         commentsEnabled,
+        todoListEnabled,
+        toDiscussToggleEnabled,
+        toDiscussDefaultEnabled,
         gridPickerEnabled,
         inAppCustomizationEnabled,
       },
@@ -700,7 +744,7 @@ async function run() {
   console.log(`   Mode:        ${mode}`);
   console.log(`   App Name:    ${appName}`);
   console.log(`   Package ID:  ${packageId}`);
-  console.log(`   Features:    blades=${bodyCareEnabled}, stars=${moodStarsEnabled}, comments=${commentsEnabled}, gridPicker=${gridPickerEnabled}`);
+  console.log(`   Features:    blades=${bodyCareEnabled}, stars=${moodStarsEnabled}, comments=${commentsEnabled}, todos=${todoListEnabled}, toDiscussSwitch=${toDiscussToggleEnabled}(default=${toDiscussDefaultEnabled}), gridPicker=${gridPickerEnabled}`);
   console.log("=======================================================\n");
 }
 

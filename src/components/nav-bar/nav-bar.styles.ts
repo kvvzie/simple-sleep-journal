@@ -1,9 +1,11 @@
 import { StyleSheet } from "react-native";
 
 export const NAV_PADDING = 10;
-export const NAV_GAP = 4;
-export const BUTTON_WIDTH = 66;
+export const NAV_GAP = 2;
+export const BUTTON_WIDTH = 52;
 export const BUTTON_HEIGHT = 44;
+export const OUTER_BUTTON_WIDTH = 44;
+export const MIDDLE_BUTTON_WIDTH = 38;
 
 export const styles = StyleSheet.create({
   wrapper: {
@@ -16,7 +18,7 @@ export const styles = StyleSheet.create({
     borderStyle: "dashed",
     borderRadius: 999,
     paddingVertical: NAV_PADDING,
-    paddingHorizontal: NAV_PADDING + 4,
+    paddingHorizontal: NAV_PADDING + 2,
     gap: NAV_GAP,
   },
   button: {

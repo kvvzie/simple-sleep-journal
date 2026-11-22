@@ -1,0 +1,142 @@
+import { useEffect, useRef } from "react";
+import { Animated, Easing, View } from "react-native";
+import { getRadioDotMetrics } from "./radio-dot.utils";
+
+type Props = {
+  checked: boolean;
+  size?: number;
+  color: string;
+  snapKey?: string | number;
+};
+
+/**
+ * Native-driver animated circular radio indicator matching Ionicons radio-button
+ * proportions with a light ring press-release and spring dot pop.
+ */
+export default function AnimatedRadioDot({
+  checked,
+  size = 22,
+  color,
+  snapKey,
+}: Props) {
+  const dotProgress = useRef(new Animated.Value(checked ? 1 : 0)).current;
+  const ringScale = useRef(new Animated.Value(1)).current;
+  const prevCheckedRef = useRef(checked);
+  const prevSnapKeyRef = useRef(snapKey);
+
+  useEffect(() => {
+    if (prevSnapKeyRef.current !== snapKey) {
+      prevSnapKeyRef.current = snapKey;
+      prevCheckedRef.current = checked;
+      dotProgress.stopAnimation();
+      ringScale.stopAnimation();
+      dotProgress.setValue(checked ? 1 : 0);
+      ringScale.setValue(1);
+      return;
+    }
+
+    if (prevCheckedRef.current === checked) return;
+    prevCheckedRef.current = checked;
+
+    dotProgress.stopAnimation();
+    ringScale.stopAnimation();
+
+    if (checked) {
+      Animated.parallel([
+        Animated.spring(dotProgress, {
+          toValue: 1,
+          damping: 11,
+          stiffness: 300,
+          mass: 0.65,
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(ringScale, {
+            toValue: 0.88,
+            duration: 65,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.spring(ringScale, {
+            toValue: 1,
+            damping: 12,
+            stiffness: 280,
+            mass: 0.7,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(dotProgress, {
+          toValue: 0,
+          duration: 150,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.timing(ringScale, {
+            toValue: 0.92,
+            duration: 60,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.spring(ringScale, {
+            toValue: 1,
+            damping: 14,
+            stiffness: 260,
+            mass: 0.7,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    }
+  }, [checked, snapKey, dotProgress, ringScale]);
+
+  const { boxSize, ringSize, strokeWidth, dotSize } = getRadioDotMetrics(size);
+
+  const dotOpacity = dotProgress.interpolate({
+    inputRange: [0, 0.25, 1],
+    outputRange: [0, 1, 1],
+    extrapolate: "clamp",
+  });
+  const dotScale = dotProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.25, 1],
+  });
+
+  return (
+    <View
+      style={{
+        width: boxSize,
+        height: boxSize,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Animated.View
+        style={{
+          width: ringSize,
+          height: ringSize,
+          borderRadius: ringSize / 2,
+          borderWidth: strokeWidth,
+          borderColor: color,
+          alignItems: "center",
+          justifyContent: "center",
+          transform: [{ scale: ringScale }],
+        }}
+      >
+        <Animated.View
+          style={{
+            width: dotSize,
+            height: dotSize,
+            borderRadius: dotSize / 2,
+            backgroundColor: color,
+            opacity: dotOpacity,
+            transform: [{ scale: dotScale }],
+          }}
+        />
+      </Animated.View>
+    </View>
+  );
+}

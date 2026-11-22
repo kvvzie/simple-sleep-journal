@@ -5,7 +5,8 @@ import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useCallback, useEffect, useRef } from "react";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, View } from "react-native";
 
 SplashScreen.preventAutoHideAsync();
@@ -15,24 +16,29 @@ function ThemedRoot() {
   const scheme = useAppColorScheme();
   const opacity = useRef(new Animated.Value(1)).current;
   const prevScheme = useRef(scheme);
+  const [isThemeFading, setIsThemeFading] = useState(false);
 
   useEffect(() => {
     if (prevScheme.current === scheme) return;
     prevScheme.current = scheme;
+    setIsThemeFading(true);
     opacity.setValue(0);
     Animated.timing(opacity, {
       toValue: 1,
       duration: 240,
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
-    }).start();
-  }, [scheme]);
+    }).start(() => {
+      setIsThemeFading(false);
+    });
+  }, [scheme, opacity]);
 
   return (
     <Animated.View
       style={{ flex: 1, opacity, backgroundColor: colors.background }}
-      renderToHardwareTextureAndroid
+      renderToHardwareTextureAndroid={isThemeFading}
     >
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} animated />
       <Stack screenOptions={{ headerShown: false }} />
     </Animated.View>
   );

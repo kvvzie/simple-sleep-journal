@@ -9,9 +9,15 @@ import {
   getAllBodyCareLogs,
   getAllEdits,
   getAllLogs,
+  getAllTodos,
   importBackup,
   importLogs,
 } from "@/lib/db";
+import {
+  buildCsvExportContent,
+  buildJsonExportPayload,
+  buildTxtExportContent,
+} from "@/lib/export-utils";
 import { readTextFileFromUri, saveFileToDevice } from "@/lib/file-saver";
 import { ThemePaletteColors } from "@/types/appearance";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,7 +25,6 @@ import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import * as Linking from "expo-linking";
-import { StatusBar } from "expo-status-bar";
 import { memo, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -34,7 +39,9 @@ import {
   View,
 } from "react-native";
 import { GoogleColorPicker } from "../color-picker/google-color-picker";
+import AnimatedRadioDot from "../animated-radio-dot";
 import ConfirmDialog from "../confirm-dialog";
+import { getLocalTodayIsoDate } from "../sleep-modal/todo.utils";
 import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
 import { styles } from "./settings.styles";
 
@@ -44,8 +51,6 @@ const SWITCH_BORDER = 1.5;
 
 const columnsPageForStep = (idx: number) => MAX_STEP - idx;
 const columnsStepForPage = (page: number) => MAX_STEP - page;
-
-const MOOD_SCALE_MAX = 10;
 
 function Settings() {
   const scheme = useAppColorScheme();
@@ -74,6 +79,8 @@ function Settings() {
     setStepIndex,
     colorSchemePref,
     setColorSchemePref,
+    toDiscussEnabled,
+    setToDiscussEnabled,
     loaded,
   } = useSettings();
 
@@ -254,8 +261,8 @@ function Settings() {
       const bodyCareLogs = features.bodyCareEnabled
         ? await getAllBodyCareLogs()
         : [];
-      const bodyCareByDate = new Map<string, (typeof bodyCareLogs)[0]>();
-      bodyCareLogs.forEach((b) => bodyCareByDate.set(b.date, b));
+      const todos = await getAllTodos();
+      const todayDate = getLocalTodayIsoDate();
 
       let fileContent = "";
       let mimeType = "application/json";
@@ -263,182 +270,53 @@ function Settings() {
 
       const sanitizedName =
         fileName.trim() ||
-        `sleepinapp_export_${new Date().toISOString().split("T")[0]}`;
+        `sleepinapp_export_${todayDate}`;
 
       if (exportType === "json") {
         const allEdits = await getAllEdits();
-        const exportPayload = {
-          export_date: new Date().toISOString(),
-          version: "1.1.2",
+        const exportPayload = buildJsonExportPayload({
+          exportedAt: new Date().toISOString(),
           logs,
           edits: allEdits,
-          bodyCareLogs: features.bodyCareEnabled ? bodyCareLogs : [],
-        };
+          bodyCareLogs,
+          todos,
+          bodyCareEnabled: features.bodyCareEnabled,
+        });
         fileContent = JSON.stringify(exportPayload, null, 2);
         mimeType = "application/json";
         fileExtension = ".json";
       } else if (exportType === "txt") {
-        const filteredLogs = logs.filter((log) => {
-          if (startDate && log.date < startDate) return false;
-          if (endDate && log.date > endDate) return false;
-          return true;
-        });
-
         const allEdits = await getAllEdits();
-        const editsByDate = new Map<string, typeof allEdits>();
-        for (const e of allEdits) {
-          if (!editsByDate.has(e.log_date)) editsByDate.set(e.log_date, []);
-          editsByDate.get(e.log_date)!.push(e);
-        }
-
-        fileContent = `SLEEP / MOOD LOG REPORT (${startDate || "All Time"} to ${endDate || "All Time"})\n\n`;
-        filteredLogs.forEach((log) => {
-          const bodyCare = bodyCareByDate.get(log.date);
-          fileContent += `Date: ${log.date}\n`;
-          fileContent += `Hours Slept: ${log.hours}\n`;
-          if (features.moodStarsEnabled) {
-            fileContent += `Mood Rating: ${log.mood}/${MOOD_SCALE_MAX}\n`;
-          }
-          if (features.bodyCareEnabled) {
-            fileContent += `Self Harm: ${bodyCare ? "yes" : "no"}\n`;
-          }
-          if (features.commentsEnabled && log.comment) {
-            fileContent += `Notes: ${log.comment}\n`;
-          }
-          if (log.logged_at) fileContent += `Logged: ${log.logged_at}\n`;
-          if (log.updated_at) {
-            fileContent += `Last Edited: ${log.updated_at}\n`;
-            const dateEdits = editsByDate.get(log.date) ?? [];
-            dateEdits.forEach((e) => {
-              const parts: string[] = [];
-              if (e.changed_hours)
-                parts.push(`hours ${e.prev_hours} → ${e.new_hours}`);
-              if (features.moodStarsEnabled && e.changed_mood)
-                parts.push(`mood ${e.prev_mood} → ${e.new_mood}`);
-              if (features.commentsEnabled && e.changed_comment)
-                parts.push("comment");
-              fileContent += `  #${e.edit_index} ${e.edited_at} changed ${parts.join(", ")}\n`;
-            });
-          }
-          fileContent += `---------------------------\n`;
+        fileContent = buildTxtExportContent({
+          logs,
+          edits: allEdits,
+          bodyCareLogs,
+          todos,
+          startDate,
+          endDate,
+          moodStarsEnabled: features.moodStarsEnabled,
+          bodyCareEnabled: features.bodyCareEnabled,
+          commentsEnabled: features.commentsEnabled,
+          todoListEnabled: features.todoListEnabled !== false,
+          todayDate,
         });
-
         mimeType = "text/plain";
         fileExtension = ".txt";
       } else if (exportType === "csv") {
-        const filteredLogs = logs.filter((log) => {
-          if (startDate && log.date < startDate) return false;
-          if (endDate && log.date > endDate) return false;
-          return true;
-        });
         const allEdits = await getAllEdits();
-        const filteredEdits = allEdits.filter((e) => {
-          if (startDate && e.log_date < startDate) return false;
-          if (endDate && e.log_date > endDate) return false;
-          return true;
+        fileContent = buildCsvExportContent({
+          logs,
+          edits: allEdits,
+          bodyCareLogs,
+          todos,
+          startDate,
+          endDate,
+          moodStarsEnabled: features.moodStarsEnabled,
+          bodyCareEnabled: features.bodyCareEnabled,
+          commentsEnabled: features.commentsEnabled,
+          todoListEnabled: features.todoListEnabled !== false,
+          todayDate,
         });
-
-        const filteredBodyCareLogs = bodyCareLogs.filter((bodyCare) => {
-          if (startDate && bodyCare.date < startDate) return false;
-          if (endDate && bodyCare.date > endDate) return false;
-          return true;
-        });
-
-        const header = [
-          "record_type",
-          "date",
-          "hours",
-          "mood",
-          "comment",
-          "logged_at",
-          "updated_at",
-          "edit_index",
-          "edited_at",
-          "prev_hours",
-          "new_hours",
-          "prev_mood",
-          "new_mood",
-          "prev_comment",
-          "new_comment",
-          "changed_hours",
-          "changed_mood",
-          "changed_comment",
-          "self_harm_product_id",
-          "self_harm_top_left",
-          "self_harm_top_right",
-          "self_harm_bottom_left",
-          "self_harm_bottom_right",
-          "self_harm_updated_at",
-        ];
-
-        const rowsData: string[][] = [header];
-
-        filteredLogs.forEach((log) => {
-          rowsData.push([
-            "log",
-            log.date,
-            String(log.hours),
-            features.moodStarsEnabled ? String(log.mood) : "",
-            features.commentsEnabled ? (log.comment ?? "") : "",
-            log.logged_at ?? "",
-            log.updated_at ?? "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            ...Array(6).fill(""),
-          ]);
-        });
-
-        filteredEdits.forEach((edit) => {
-          rowsData.push([
-            "edit",
-            edit.log_date,
-            "",
-            "",
-            "",
-            "",
-            "",
-            String(edit.edit_index),
-            edit.edited_at,
-            edit.prev_hours?.toString() ?? "",
-            edit.new_hours?.toString() ?? "",
-            edit.prev_mood?.toString() ?? "",
-            edit.new_mood?.toString() ?? "",
-            edit.prev_comment ?? "",
-            edit.new_comment ?? "",
-            String(edit.changed_hours),
-            String(edit.changed_mood),
-            String(edit.changed_comment),
-            ...Array(6).fill(""),
-          ]);
-        });
-
-        if (features.bodyCareEnabled) {
-          filteredBodyCareLogs.forEach((bodyCare) => {
-            rowsData.push([
-              "self_harm",
-              bodyCare.date,
-              ...Array(16).fill(""),
-              bodyCare.product_id,
-              bodyCare.amounts["top-left"] ?? "",
-              bodyCare.amounts["top-right"] ?? "",
-              bodyCare.amounts["bottom-left"] ?? "",
-              bodyCare.amounts["bottom-right"] ?? "",
-              bodyCare.updated_at ?? "",
-            ]);
-          });
-        }
-
-        const csvEscape = (s: string) => `"${s.replace(/"/g, '""')}"`;
-        fileContent = rowsData.map((r) => r.map(csvEscape).join(",")).join("\n");
         mimeType = "text/csv";
         fileExtension = ".csv";
       }
@@ -479,12 +357,19 @@ function Settings() {
 
       if (Array.isArray(parsed)) {
         await importLogs(parsed);
-      } else if (parsed && Array.isArray(parsed.logs)) {
+      } else if (parsed && (Array.isArray(parsed.logs) || Array.isArray(parsed.todos))) {
+        const importedLogs = Array.isArray(parsed.logs) ? parsed.logs : [];
         const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
         const importedBodyCareLogs = Array.isArray(parsed.bodyCareLogs)
           ? parsed.bodyCareLogs
           : [];
-        await importBackup(parsed.logs, edits, importedBodyCareLogs);
+        const importedTodos = Array.isArray(parsed.todos) ? parsed.todos : [];
+        await importBackup(
+          importedLogs,
+          edits,
+          importedBodyCareLogs,
+          importedTodos,
+        );
       } else {
         throw new Error("Invalid format");
       }
@@ -526,8 +411,6 @@ function Settings() {
         { backgroundColor: backgrounds.settings ? "transparent" : colors.background },
       ]}
     >
-      <StatusBar style={scheme === "dark" ? "light" : "dark"} animated />
-
       {features.inAppCustomizationEnabled ? (
         <Pressable
           onPress={() => setStudioModalVisible(true)}
@@ -657,7 +540,13 @@ function Settings() {
               color scheme
             </Text>
             <View
-              style={[styles.switchTrack, { borderColor: colors.textSecondary }]}
+              style={[
+                styles.switchTrack,
+                { borderColor: colors.textSecondary },
+                features.toDiscussToggleEnabled !== false && {
+                  marginBottom: 14,
+                },
+              ]}
               {...swipePan.panHandlers}
             >
               <Animated.View
@@ -699,6 +588,36 @@ function Settings() {
               ))}
             </View>
           </>
+        )}
+
+        {features.toDiscussToggleEnabled !== false && (
+          <Pressable
+            onPress={() => setToDiscussEnabled(!toDiscussEnabled)}
+            hitSlop={10}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              marginBottom: 14,
+              paddingVertical: 2,
+            }}
+          >
+            <AnimatedRadioDot
+              checked={toDiscussEnabled}
+              size={22}
+              color={toDiscussEnabled ? colors.text : colors.textSecondary}
+            />
+            <Text
+              style={{
+                fontSize: 18,
+                color: toDiscussEnabled ? colors.text : colors.textSecondary,
+                fontFamily: resolveFont("regular"),
+              }}
+            >
+              to discuss
+            </Text>
+          </Pressable>
         )}
 
         {(!theme.font || !theme.font.name || theme.font.name === "Redaction") && (
@@ -1719,6 +1638,33 @@ function Settings() {
               <Pressable
                 onPress={() =>
                   updateFeatures({
+                    todoListEnabled: features.todoListEnabled === false,
+                  })
+                }
+                style={styles.studioRow}
+              >
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  to-do list
+                </Text>
+                <Ionicons
+                  name={
+                    features.todoListEnabled !== false
+                      ? "checkbox"
+                      : "square-outline"
+                  }
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={() =>
+                  updateFeatures({
                     gridPickerEnabled: !features.gridPickerEnabled,
                   })
                 }
@@ -1792,6 +1738,100 @@ function Settings() {
                             ]}
                           >
                             {step.rows}x{step.columns}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              <Pressable
+                onPress={() => {
+                  const nextToggleVisible =
+                    features.toDiscussToggleEnabled === false;
+                  updateFeatures({
+                    toDiscussToggleEnabled: nextToggleVisible,
+                    toDiscussDefaultEnabled: toDiscussEnabled,
+                  });
+                }}
+                style={styles.studioRow}
+              >
+                <Text
+                  style={[
+                    styles.studioLabel,
+                    { color: colors.text, fontFamily: resolveFont("regular") },
+                  ]}
+                >
+                  to discuss switch
+                </Text>
+                <Ionicons
+                  name={
+                    features.toDiscussToggleEnabled !== false
+                      ? "checkbox"
+                      : "square-outline"
+                  }
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+
+              {features.toDiscussToggleEnabled === false && (
+                <View
+                  style={[
+                    styles.studioCard,
+                    {
+                      backgroundColor: colors.backgroundElement,
+                      borderColor: colors.textSecondary,
+                      marginTop: 4,
+                      marginBottom: 12,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.studioLabel,
+                      { color: colors.text, fontFamily: resolveFont("bold") },
+                    ]}
+                  >
+                    locked &quot;to discuss&quot; tab ({toDiscussEnabled ? "on" : "off"})
+                  </Text>
+                  <View style={styles.gridStepRow}>
+                    {[false, true].map((val) => {
+                      const isSelected = toDiscussEnabled === val;
+                      return (
+                        <Pressable
+                          key={String(val)}
+                          onPress={() => {
+                            setToDiscussEnabled(val);
+                            updateFeatures({ toDiscussDefaultEnabled: val });
+                          }}
+                          style={[
+                            styles.gridStepChip,
+                            {
+                              backgroundColor: isSelected
+                                ? colors.text
+                                : colors.background,
+                              borderColor: isSelected
+                                ? colors.text
+                                : colors.textSecondary,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.gridStepChipText,
+                              {
+                                color: isSelected
+                                  ? colors.background
+                                  : colors.text,
+                                fontFamily: resolveFont(
+                                  isSelected ? "bold" : "regular",
+                                ),
+                              },
+                            ]}
+                          >
+                            {val ? "on" : "off"}
                           </Text>
                         </Pressable>
                       );

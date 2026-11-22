@@ -1,7 +1,15 @@
 import { GridSize, GRID_STEPS } from "@/constants/grid";
+import { getNativeAppearanceOverride } from "@/hooks/color-scheme.utils";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useContext, useEffect, useState } from "react";
-import { useWindowDimensions } from "react-native";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { Appearance, Platform, useWindowDimensions } from "react-native";
 
 export type ColorSchemePref = "light" | "automatic" | "dark";
 export { GridSize, GRID_STEPS };
@@ -11,9 +19,11 @@ type SettingsState = {
   rows: number;
   columns: number;
   colorSchemePref: ColorSchemePref;
+  toDiscussEnabled: boolean;
   loaded: boolean;
   setStepIndex: (index: number) => void;
   setColorSchemePref: (pref: ColorSchemePref) => void;
+  setToDiscussEnabled: (enabled: boolean) => void;
 };
 
 const SettingsContext = createContext<SettingsState | null>(null);
@@ -27,6 +37,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [stepIndexWide, setStepIndexWide] = useState(1);
   const [colorSchemePref, setColorSchemePrefState] =
     useState<ColorSchemePref>("automatic");
+  const [toDiscussEnabled, setToDiscussEnabledState] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -47,6 +58,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           }
           if (parsed.colorSchemePref)
             setColorSchemePrefState(parsed.colorSchemePref);
+          if (typeof parsed.toDiscussEnabled === "boolean")
+            setToDiscussEnabledState(parsed.toDiscussEnabled);
         } catch {}
       }
       setLoaded(true);
@@ -57,35 +70,63 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (!loaded) return;
     AsyncStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ stepIndexNarrow, stepIndexWide, colorSchemePref }),
+      JSON.stringify({
+        stepIndexNarrow,
+        stepIndexWide,
+        colorSchemePref,
+        toDiscussEnabled,
+      }),
     );
-  }, [stepIndexNarrow, stepIndexWide, colorSchemePref, loaded]);
+  }, [stepIndexNarrow, stepIndexWide, colorSchemePref, toDiscussEnabled, loaded]);
+
+  useEffect(() => {
+    if (!loaded || Platform.OS === "web") return;
+    try {
+      Appearance.setColorScheme(getNativeAppearanceOverride(colorSchemePref));
+    } catch {}
+  }, [colorSchemePref, loaded]);
 
   const stepIndex = isWideScreen ? stepIndexWide : stepIndexNarrow;
 
-  const setStepIndex = (index: number) => {
-    const clamped = Math.max(0, Math.min(GRID_STEPS.length - 1, index));
-    if (isWideScreen) {
-      setStepIndexWide(clamped);
-    } else {
-      setStepIndexNarrow(clamped);
-    }
-  };
+  const setStepIndex = useCallback(
+    (index: number) => {
+      const clamped = Math.max(0, Math.min(GRID_STEPS.length - 1, index));
+      if (isWideScreen) {
+        setStepIndexWide(clamped);
+      } else {
+        setStepIndexNarrow(clamped);
+      }
+    },
+    [isWideScreen],
+  );
 
   const current = GRID_STEPS[stepIndex];
 
+  const value = useMemo<SettingsState>(
+    () => ({
+      stepIndex,
+      rows: current.rows,
+      columns: current.columns,
+      colorSchemePref,
+      toDiscussEnabled,
+      loaded,
+      setStepIndex,
+      setColorSchemePref: setColorSchemePrefState,
+      setToDiscussEnabled: setToDiscussEnabledState,
+    }),
+    [
+      stepIndex,
+      current.rows,
+      current.columns,
+      colorSchemePref,
+      toDiscussEnabled,
+      loaded,
+      setStepIndex,
+    ],
+  );
+
   return (
-    <SettingsContext.Provider
-      value={{
-        stepIndex,
-        rows: current.rows,
-        columns: current.columns,
-        colorSchemePref,
-        loaded,
-        setStepIndex,
-        setColorSchemePref: setColorSchemePrefState,
-      }}
-    >
+    <SettingsContext.Provider value={value}>
       {children}
     </SettingsContext.Provider>
   );

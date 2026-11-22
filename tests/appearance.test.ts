@@ -124,6 +124,9 @@ describe("Theme & Appearance Utilities", () => {
       bodyCareEnabled: false,
       moodStarsEnabled: true,
       commentsEnabled: false,
+      todoListEnabled: false,
+      toDiscussToggleEnabled: false,
+      toDiscussDefaultEnabled: false,
       gridPickerEnabled: false,
       inAppCustomizationEnabled: false,
     };
@@ -133,6 +136,9 @@ describe("Theme & Appearance Utilities", () => {
     assert.equal(bakedReset.features.colorSchemeToggleEnabled, false);
     assert.equal(bakedReset.features.bodyCareEnabled, false);
     assert.equal(bakedReset.features.commentsEnabled, false);
+    assert.equal(bakedReset.features.todoListEnabled, false);
+    assert.equal(bakedReset.features.toDiscussToggleEnabled, false);
+    assert.equal(bakedReset.features.toDiscussDefaultEnabled, false);
     assert.equal(bakedReset.features.inAppCustomizationEnabled, false);
 
     const defaultReset = getResetDefaults("default", bakedTheme, bakedFeatures);
@@ -210,6 +216,39 @@ describe("Theme & Appearance Utilities", () => {
       ),
       true,
     );
+
+    assert.equal(DEFAULT_FEATURE_FLAGS.todoListEnabled, true);
+    assert.equal(DEFAULT_FEATURE_FLAGS.toDiscussToggleEnabled, true);
+    const defaultWithTodoDisabled: AppTheme = {
+      ...DEFAULT_THEME,
+      features: { todoListEnabled: false },
+    };
+    assert.equal(
+      isThemeModifiedFromDefaults(
+        "default",
+        defaultWithTodoDisabled,
+        bakedBaseline,
+        defaultWithTodoDisabled.features,
+      ),
+      true,
+    );
+
+    const parsedLook = parseAndValidateMoodTheme({
+      format: "simple-sleep-journal-theme",
+      version: 1,
+      name: "No Discuss Look",
+      palette: {},
+      backgrounds: {},
+      features: {
+        toDiscussToggleEnabled: false,
+        toDiscussDefaultEnabled: false,
+      },
+    });
+    assert.equal(parsedLook.valid, true);
+    if (parsedLook.valid) {
+      assert.equal(parsedLook.theme.features?.toDiscussToggleEnabled, false);
+      assert.equal(parsedLook.theme.features?.toDiscussDefaultEnabled, false);
+    }
   });
 
   it("resolveFontFamily falls back to Redaction weights or respects custom font", () => {

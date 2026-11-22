@@ -1,40 +1,52 @@
 import { useAppearance } from "@/contexts/appearance-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import {
+  addTodoTask,
   BodyCareAmounts,
   deleteSleepLog,
+  deleteTodoTask,
   getBodyCareLog,
   getLastBodyCareProductId,
   getSleepLog,
   getSleepLogEdits,
+  getTodosForDate,
   saveBodyCareLog,
   saveSleepLog,
   SleepLogEdit,
+  TodoTask,
+  toggleTodoCompleted,
+  updateTodoTitle,
 } from "@/lib/db";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   BackHandler,
   DeviceEventEmitter,
   Dimensions,
+  Easing,
   Image,
   ImageSourcePropType,
+  Keyboard,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
   Modal,
   PanResponder,
   Platform,
   ScrollView,
+  ScrollViewInstance,
   Text,
   TextInput,
   TouchableOpacity,
   View,
   ViewInstance,
 } from "react-native";
+import AnimatedRadioDot from "../animated-radio-dot";
 import ConfirmDialog from "../confirm-dialog";
 import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
 import { styles } from "./sleep-modal.styles";
+import TodoListSection from "./todo-list-section";
 
 type Props = {
   visible: boolean;
@@ -131,7 +143,11 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   const [comment, setComment] = useState("");
   const [hasEntry, setHasEntry] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [todoPendingDelete, setTodoPendingDelete] = useState<TodoTask | null>(null);
+  const [todos, setTodos] = useState<TodoTask[]>([]);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [scrollLocked, setScrollLocked] = useState(false);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
 
   const [edits, setEdits] = useState<SleepLogEdit[]>([]);
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -169,13 +185,24 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     "bottom-right": new Animated.Value(0),
   }).current;
 
+  const bodyCareHeightAnim = useRef(new Animated.Value(0)).current;
   const bodyCareContentOpacity = useRef(new Animated.Value(0)).current;
-  const bodyCareContentTranslate = useRef(new Animated.Value(-12)).current;
+  const bodyCareContentTranslate = useRef(new Animated.Value(-8)).current;
 
   const bodyCarePickerProgress = useRef(new Animated.Value(0)).current;
 
   const [bodyCareContentMounted, setBodyCareContentMounted] = useState(false);
+  const [bodyCareSettledOpen, setBodyCareSettledOpen] = useState(false);
   const [bodyCarePickerMounted, setBodyCarePickerMounted] = useState(false);
+
+  const bodyCareContentMountedRef = useRef(false);
+  const bodyCareSettledOpenRef = useRef(false);
+  const bodyCareDesiredOpenRef = useRef(false);
+  const bodyCarePendingMeasureRef = useRef(false);
+  const measuredBodyCareHeightRef = useRef(0);
+  const pendingBodyCareClearRef = useRef(false);
+  const bodyCareEnabledRef = useRef(false);
+  const prevArrowPagerKeyRef = useRef(pagerKey);
 
   const bodyCareArrowOpacity = useRef(new Animated.Value(0)).current;
   const bodyCareArrowScale = useRef(new Animated.Value(0.8)).current;
@@ -215,6 +242,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
 
   useEffect(() => {
     if (visible) {
+      setNowMs(Date.now());
       loadExisting();
       closedRef.current = false;
       translateY.setValue(SCREEN_HEIGHT);
@@ -224,8 +252,19 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
         damping: 20,
         stiffness: 200,
       }).start();
+    } else {
+      setTodoPendingDelete(null);
+      setConfirmVisible(false);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible || todos.length === 0) return;
+    const interval = setInterval(() => {
+      setNowMs(Date.now());
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [visible, todos.length]);
 
   useEffect(() => {
     if (visible) {
@@ -258,14 +297,35 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   }, [visible, date]);
 
   useEffect(() => {
-    if (!bodyCareEnabled) {
-      bodyCareArrowOpacity.setValue(0);
-      bodyCareArrowScale.setValue(0.8);
+    if (prevArrowPagerKeyRef.current !== pagerKey) {
+      prevArrowPagerKeyRef.current = pagerKey;
+      bodyCareArrowOpacity.stopAnimation();
+      bodyCareArrowScale.stopAnimation();
+      bodyCareArrowOpacity.setValue(bodyCareEnabled ? 1 : 0);
+      bodyCareArrowScale.setValue(bodyCareEnabled ? 1 : 0.8);
       return;
     }
 
-    bodyCareArrowOpacity.setValue(0);
-    bodyCareArrowScale.setValue(0.8);
+    bodyCareArrowOpacity.stopAnimation();
+    bodyCareArrowScale.stopAnimation();
+
+    if (!bodyCareEnabled) {
+      Animated.parallel([
+        Animated.timing(bodyCareArrowOpacity, {
+          toValue: 0,
+          duration: 130,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bodyCareArrowScale, {
+          toValue: 0.8,
+          duration: 130,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+      return;
+    }
 
     Animated.parallel([
       Animated.timing(bodyCareArrowOpacity, {
@@ -280,32 +340,52 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [bodyCareEnabled]);
+  }, [bodyCareEnabled, pagerKey]);
 
   const loadExisting = async () => {
     if (!date) return;
     stateRef.current.dirty = false;
     setReadyHours(null);
+    setTodos([]);
     setHistoryExpanded(false);
     historyOpacity.setValue(0);
     historyTranslate.setValue(-6);
 
-    const existing = await getSleepLog(date);
+    const [existing, bodyCare, visibleTodos] = await Promise.all([
+      getSleepLog(date),
+      getBodyCareLog(date),
+      getTodosForDate(date),
+    ]);
+    const [lastProductId, history] = await Promise.all([
+      bodyCare ? Promise.resolve(null) : getLastBodyCareProductId(),
+      existing ? getSleepLogEdits(date) : Promise.resolve([]),
+    ]);
+
     const h = existing?.hours ?? 0;
 
     setHours(h);
     setMood(existing?.mood ?? 0);
     setComment(existing?.comment ?? "");
 
+    bodyCareHeightAnim.stopAnimation();
+    bodyCareContentOpacity.stopAnimation();
+    bodyCareContentTranslate.stopAnimation();
+    bodyCareContentMountedRef.current = false;
+    bodyCareSettledOpenRef.current = false;
+    bodyCareDesiredOpenRef.current = false;
+    bodyCarePendingMeasureRef.current = false;
+    pendingBodyCareClearRef.current = false;
+    bodyCareEnabledRef.current = Boolean(bodyCare);
+
     setBodyCareMenuOpen(false);
     setBodyCareProductPickerOpen(false);
     setBodyCareContentMounted(false);
+    setBodyCareSettledOpen(false);
     setBodyCarePickerMounted(false);
+    bodyCareHeightAnim.setValue(0);
     bodyCareContentOpacity.setValue(0);
-    bodyCareContentTranslate.setValue(-12);
+    bodyCareContentTranslate.setValue(-8);
     bodyCarePickerProgress.setValue(0);
-
-    const bodyCare = await getBodyCareLog(date);
 
     if (bodyCare) {
       setBodyCareEnabled(true);
@@ -327,8 +407,6 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
         );
       });
     } else {
-      const lastProductId = await getLastBodyCareProductId();
-
       setBodyCareEnabled(false);
       setSelectedBodyCareProductId(lastProductId ?? "gillette-platinum");
       setBodyCareAmounts({});
@@ -341,9 +419,8 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     setHasEntry(!!existing);
     setLoggedAt(existing?.logged_at ?? null);
     setUpdatedAt(existing?.updated_at ?? null);
-
-    const history = existing ? await getSleepLogEdits(date) : [];
     setEdits(history);
+    setTodos(visibleTodos);
 
     stateRef.current.dirty = false;
     setPagerKey((k) => k + 1);
@@ -377,6 +454,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     if (closedRef.current) return;
 
     closedRef.current = true;
+    Keyboard.dismiss();
     const s = stateRef.current;
     closeAnimated();
 
@@ -491,11 +569,56 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   ).current;
 
   const handleDelete = async () => {
+    closedRef.current = true;
     if (date) await deleteSleepLog(date);
     onSaved();
     setConfirmVisible(false);
     closeAnimated();
   };
+
+  const refreshTodosForCurrentDate = async () => {
+    if (!date) return;
+    setNowMs(Date.now());
+    const visibleTodos = await getTodosForDate(date);
+    setTodos(visibleTodos);
+    onSaved();
+  };
+
+  const handleAddTodo = async (title: string) => {
+    if (!date) return;
+    await addTodoTask(date, title);
+    await refreshTodosForCurrentDate();
+  };
+
+  const handleToggleTodo = async (todo: TodoTask) => {
+    if (!date) return;
+    await toggleTodoCompleted(todo.id, date);
+    await refreshTodosForCurrentDate();
+  };
+
+  const handleEditTodo = async (todo: TodoTask, nextTitle: string) => {
+    await updateTodoTitle(todo.id, nextTitle);
+    await refreshTodosForCurrentDate();
+  };
+
+  const handleDeleteTodoConfirm = async () => {
+    const target = todoPendingDelete;
+    setTodoPendingDelete(null);
+    if (!target) return;
+    await deleteTodoTask(target.id);
+    await refreshTodosForCurrentDate();
+  };
+
+  const scrollTodoIntoView = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 120);
+  };
+
+  const hasDayData =
+    hasEntry ||
+    (date !== null &&
+      todos.some((t) => t.created_date === date || t.completed_date === date));
 
   const toggleHistory = () => {
     if (!historyExpanded) {
@@ -530,21 +653,28 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     }
   };
 
-  const selectedBodyCareProduct =
-    BODY_CARE_PRODUCTS.find(
-      (product) => product.id === selectedBodyCareProductId,
-    ) ?? null;
+  const renderHourLabel = useCallback((p: number) => `${pageToHour(p)}h`, []);
+  const boldFont = resolveFont("bold");
+  const hoursLabelStyle = useMemo(
+    () => [styles.hoursValueCenter, { color: colors.text, fontFamily: boldFont }],
+    [colors.text, boldFont],
+  );
 
-  const bodyCareImageAsset = selectedBodyCareProduct
-    ? Image.resolveAssetSource(selectedBodyCareProduct.images.full)
-    : null;
+  const selectedBodyCareProduct = useMemo(
+    () =>
+      BODY_CARE_PRODUCTS.find(
+        (product) => product.id === selectedBodyCareProductId,
+      ) ?? null,
+    [selectedBodyCareProductId],
+  );
 
-  const bodyCareImageAspectRatio =
-    bodyCareImageAsset?.width != null &&
-    bodyCareImageAsset?.height != null &&
-    bodyCareImageAsset.height > 0
-      ? bodyCareImageAsset.width / bodyCareImageAsset.height
+  const bodyCareImageAspectRatio = useMemo(() => {
+    if (!selectedBodyCareProduct) return 1;
+    const asset = Image.resolveAssetSource(selectedBodyCareProduct.images.full);
+    return asset?.width != null && asset?.height != null && asset.height > 0
+      ? asset.width / asset.height
       : 1;
+  }, [selectedBodyCareProduct]);
 
   const openBodyCarePicker = () => {
     setBodyCarePickerMounted(true);
@@ -568,46 +698,137 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     });
   };
 
-  const openBodyCareContent = () => {
-    setBodyCareContentMounted(true);
+  const runBodyCareOpenAnimation = (targetHeight: number) => {
+    bodyCareHeightAnim.stopAnimation();
+    bodyCareContentOpacity.stopAnimation();
+    bodyCareContentTranslate.stopAnimation();
 
-    bodyCareContentOpacity.setValue(0);
-    bodyCareContentTranslate.setValue(-12);
-
-    requestAnimationFrame(() => {
-      Animated.parallel([
-        Animated.timing(bodyCareContentOpacity, {
-          toValue: 1,
-          duration: 160,
-          useNativeDriver: true,
-        }),
-        Animated.spring(bodyCareContentTranslate, {
-          toValue: 0,
-          damping: 20,
-          stiffness: 230,
-          mass: 0.8,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
-  };
-
-  const closeBodyCareContent = () => {
     Animated.parallel([
+      Animated.timing(bodyCareHeightAnim, {
+        toValue: targetHeight,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
       Animated.timing(bodyCareContentOpacity, {
-        toValue: 0,
-        duration: 110,
+        toValue: 1,
+        duration: 210,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(bodyCareContentTranslate, {
-        toValue: -8,
-        duration: 130,
+        toValue: 0,
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start(({ finished }) => {
-      if (finished) {
-        setBodyCareContentMounted(false);
+      if (finished && bodyCareDesiredOpenRef.current) {
+        bodyCareSettledOpenRef.current = true;
+        setBodyCareSettledOpen(true);
       }
+    });
+  };
+
+  const handleBodyCareMenuLayout = (event: LayoutChangeEvent) => {
+    const measuredHeight = event.nativeEvent.layout.height;
+    if (measuredHeight <= 0) return;
+
+    measuredBodyCareHeightRef.current = measuredHeight;
+
+    if (bodyCarePendingMeasureRef.current && bodyCareDesiredOpenRef.current) {
+      bodyCarePendingMeasureRef.current = false;
+      runBodyCareOpenAnimation(measuredHeight);
+    }
+  };
+
+  const openBodyCareContent = () => {
+    bodyCareDesiredOpenRef.current = true;
+
+    if (bodyCareContentMountedRef.current) {
+      if (bodyCareSettledOpenRef.current) return;
+
+      if (!bodyCarePendingMeasureRef.current && measuredBodyCareHeightRef.current > 0) {
+        runBodyCareOpenAnimation(measuredBodyCareHeightRef.current);
+      }
+      return;
+    }
+
+    bodyCareHeightAnim.stopAnimation();
+    bodyCareContentOpacity.stopAnimation();
+    bodyCareContentTranslate.stopAnimation();
+
+    bodyCareHeightAnim.setValue(0);
+    bodyCareContentOpacity.setValue(0);
+    bodyCareContentTranslate.setValue(-8);
+
+    bodyCareSettledOpenRef.current = false;
+    bodyCareContentMountedRef.current = true;
+    bodyCarePendingMeasureRef.current = true;
+    setBodyCareSettledOpen(false);
+    setBodyCareContentMounted(true);
+  };
+
+  const closeBodyCareContent = () => {
+    bodyCareDesiredOpenRef.current = false;
+    bodyCarePendingMeasureRef.current = false;
+
+    if (!bodyCareContentMountedRef.current) return;
+
+    bodyCareHeightAnim.stopAnimation();
+    bodyCareContentOpacity.stopAnimation();
+    bodyCareContentTranslate.stopAnimation();
+
+    if (bodyCareSettledOpenRef.current) {
+      bodyCareHeightAnim.setValue(measuredBodyCareHeightRef.current);
+      bodyCareSettledOpenRef.current = false;
+      setBodyCareSettledOpen(false);
+    }
+
+    requestAnimationFrame(() => {
+      if (bodyCareDesiredOpenRef.current) return;
+
+      Animated.parallel([
+        Animated.timing(bodyCareHeightAnim, {
+          toValue: 0,
+          duration: 210,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: false,
+        }),
+        Animated.timing(bodyCareContentOpacity, {
+          toValue: 0,
+          duration: 150,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(bodyCareContentTranslate, {
+          toValue: -8,
+          duration: 190,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished || bodyCareDesiredOpenRef.current) return;
+
+        bodyCareContentMountedRef.current = false;
+        bodyCareSettledOpenRef.current = false;
+        setBodyCareContentMounted(false);
+        setBodyCareSettledOpen(false);
+        bodyCareHeightAnim.setValue(0);
+
+        setBodyCarePickerMounted(false);
+        bodyCarePickerProgress.setValue(0);
+
+        if (pendingBodyCareClearRef.current && !bodyCareEnabledRef.current) {
+          pendingBodyCareClearRef.current = false;
+          setSelectedBodyCareProductId(null);
+          setBodyCareAmounts({});
+          setBodyCareSelectedZones({});
+          BODY_CARE_ZONES.forEach((zone) => {
+            bodyCareOverlayOpacity[zone].setValue(0);
+          });
+        }
+      });
     });
   };
 
@@ -660,34 +881,36 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     }
 
     setBodyCareProductPickerOpen(false);
-    closeBodyCarePicker();
     closeBodyCareContent();
   };
 
   const toggleBodyCareEnabled = () => {
     const nextEnabled = !bodyCareEnabled;
+    bodyCareEnabledRef.current = nextEnabled;
 
     setBodyCareEnabled(nextEnabled);
     stateRef.current.dirty = true;
 
     if (nextEnabled) {
+      if (pendingBodyCareClearRef.current) {
+        pendingBodyCareClearRef.current = false;
+        setBodyCareAmounts({});
+        setBodyCareSelectedZones({});
+        BODY_CARE_ZONES.forEach((zone) => {
+          bodyCareOverlayOpacity[zone].setValue(0);
+        });
+      }
+
       setBodyCareMenuOpen(true);
-
       setSelectedBodyCareProductId((current) => current ?? "gillette-platinum");
-
       openBodyCareContent();
       return;
     }
 
+    pendingBodyCareClearRef.current = true;
     setBodyCareMenuOpen(false);
     setBodyCareProductPickerOpen(false);
-
-    closeBodyCarePicker();
     closeBodyCareContent();
-
-    setSelectedBodyCareProductId(null);
-    setBodyCareAmounts({});
-    setBodyCareSelectedZones({});
   };
 
   const toggleBodyCareZone = (zone: BodyCareZone) => {
@@ -779,7 +1002,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        <StatusBar style="light" />
+        {visible && <StatusBar style="light" />}
         <View
           style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
         >
@@ -801,6 +1024,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
               <View style={styles.dragHandle} />
             </View>
             <ScrollView
+              ref={scrollViewRef}
               scrollEnabled={!scrollLocked}
               contentContainerStyle={styles.scrollContent}
               keyboardShouldPersistTaps="handled"
@@ -831,17 +1055,14 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                   pagerKey={pagerKey}
                   page={HOURS_CENTER + readyHours}
                   totalPages={HOURS_TOTAL_PAGES}
-                  renderLabel={(p) => `${pageToHour(p)}h`}
+                  renderLabel={renderHourLabel}
                   onSelected={onHoursSelected}
                   onScrollStateChanged={onHoursScrollStateChanged}
                   arrowColor={colors.textSecondary}
                   containerStyle={styles.hoursColumn}
                   pagerStyle={styles.hoursPager}
                   pageStyle={styles.hoursPage}
-                  labelStyle={[
-                    styles.hoursValueCenter,
-                    { color: colors.text, fontFamily: resolveFont("bold") },
-                  ]}
+                  labelStyle={hoursLabelStyle}
                 />
               )}
 
@@ -894,14 +1115,11 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                         style={styles.bodyCareRadioInput}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <Ionicons
-                          name={
-                            bodyCareEnabled
-                              ? "radio-button-on"
-                              : "radio-button-off"
-                          }
+                        <AnimatedRadioDot
+                          checked={bodyCareEnabled}
                           size={24}
                           color={colors.text}
+                          snapKey={pagerKey}
                         />
                       </TouchableOpacity>
                     </View>
@@ -958,10 +1176,25 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                   <Animated.View
                     style={[
                       styles.bodyCareAnimatedContent,
-                      bodyCareContentStyle,
+                      !bodyCareSettledOpen && {
+                        height: bodyCareHeightAnim,
+                        overflow: "hidden",
+                      },
                     ]}
                   >
-                    <View style={styles.bodyCareMenu}>
+                    <Animated.View
+                      onLayout={handleBodyCareMenuLayout}
+                      style={[
+                        styles.bodyCareMenu,
+                        !bodyCareSettledOpen && {
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                        },
+                        bodyCareContentStyle,
+                      ]}
+                    >
                       <Text
                         style={[
                           styles.bodyCareLabel,
@@ -1173,7 +1406,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                           </View>
                         </>
                       )}
-                    </View>
+                    </Animated.View>
                   </Animated.View>
                 )}
               </View>
@@ -1220,6 +1453,22 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                     />
                   </View>
                 </>
+              )}
+
+              {features.todoListEnabled !== false && (
+                <TodoListSection
+                  todos={todos}
+                  colors={colors}
+                  scheme={scheme}
+                  resolveFont={resolveFont}
+                  nowMs={nowMs}
+                  resetKey={pagerKey}
+                  onAddTodo={handleAddTodo}
+                  onToggleTodo={handleToggleTodo}
+                  onEditTodo={handleEditTodo}
+                  onRequestDeleteTodo={setTodoPendingDelete}
+                  onInputFocus={scrollTodoIntoView}
+                />
               )}
 
               {hasEntry && (
@@ -1283,7 +1532,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                 </TouchableOpacity>
               )}
 
-              {hasEntry && (
+              {hasDayData && (
                 <TouchableOpacity
                   activeOpacity={0.9}
                   onPressIn={() => {
@@ -1319,6 +1568,13 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
           message={`Are you sure you want to delete data for ${date}?`}
           onConfirm={handleDelete}
           onCancel={() => setConfirmVisible(false)}
+        />
+
+        <ConfirmDialog
+          visible={todoPendingDelete !== null}
+          message={`Are you sure you want to delete "${todoPendingDelete?.title ?? ""}"?`}
+          onConfirm={() => void handleDeleteTodoConfirm()}
+          onCancel={() => setTodoPendingDelete(null)}
         />
       </KeyboardAvoidingView>
     </Modal>

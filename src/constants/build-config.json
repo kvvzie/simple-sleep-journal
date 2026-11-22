@@ -7,6 +7,9 @@
     "bodyCareEnabled": true,
     "moodStarsEnabled": true,
     "commentsEnabled": true,
+    "todoListEnabled": true,
+    "toDiscussToggleEnabled": true,
+    "toDiscussDefaultEnabled": true,
     "gridPickerEnabled": true,
     "inAppCustomizationEnabled": true
   },
@@ -25,6 +28,9 @@
       "bodyCareEnabled": true,
       "moodStarsEnabled": true,
       "commentsEnabled": true,
+      "todoListEnabled": true,
+      "toDiscussToggleEnabled": true,
+      "toDiscussDefaultEnabled": true,
       "gridPickerEnabled": true,
       "inAppCustomizationEnabled": true
     }

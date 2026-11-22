@@ -83,6 +83,7 @@ export const styles = StyleSheet.create({
   bodyCareMenu: {
     width: "100%",
     marginTop: 12,
+    paddingBottom: 16,
   },
 
   bodyCareLabel: {
@@ -170,7 +171,7 @@ export const styles = StyleSheet.create({
     maxWidth: 320,
     alignSelf: "center",
     position: "relative",
-    marginBottom: 20,
+    marginBottom: 16,
     overflow: "visible",
   },
 
@@ -283,5 +284,71 @@ export const styles = StyleSheet.create({
   bodyCareAnimatedContent: {
     width: "100%",
     overflow: "visible",
+  },
+  todoSection: {
+    width: "100%",
+    marginTop: 24,
+    alignItems: "center",
+  },
+  todoListContainer: {
+    width: "100%",
+    marginTop: 10,
+    alignItems: "center",
+    gap: 12,
+  },
+  todoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    maxWidth: "100%",
+    gap: 8,
+  },
+  todoIconButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  todoTitleBox: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  todoTitleText: {
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: "left",
+  },
+  todoTimestampCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  todoTimestampText: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  todoInlineInput: {
+    fontSize: 18,
+    lineHeight: 24,
+    minWidth: 100,
+    borderBottomWidth: 1,
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+    textAlignVertical: "center",
+    includeFontPadding: false,
+  },
+  todoAddRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    maxWidth: "100%",
+    gap: 8,
+    paddingVertical: 2,
+  },
+  todoAddText: {
+    fontSize: 18,
+    lineHeight: 24,
   },
 });

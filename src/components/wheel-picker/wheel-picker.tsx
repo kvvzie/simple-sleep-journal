@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, memo, useImperativeHandle, useRef } from "react";
 import { Pressable, Text, View } from "react-native";
 import PagerView from "react-native-pager-view";
 
@@ -151,4 +151,4 @@ const WheelPicker = forwardRef<WheelPickerHandle, WheelPickerProps>(
   },
 );
 
-export default WheelPicker;
+export default memo(WheelPicker);

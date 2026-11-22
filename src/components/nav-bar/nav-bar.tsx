@@ -1,9 +1,21 @@
 import { useAppearance } from "@/contexts/appearance-context";
 import { useNavDirection } from "@/contexts/nav-direction-context";
+import {
+  getNextTabIndexOnSwipe,
+  getTabIndex,
+  getVisibleTabs,
+  ScreenKey,
+} from "@/contexts/nav-utils";
+import { useSettings } from "@/contexts/settings-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef } from "react";
 import { Animated, PanResponder, Pressable, View } from "react-native";
-import { styles } from "./nav-bar.styles";
+import {
+  MIDDLE_BUTTON_WIDTH,
+  OUTER_BUTTON_WIDTH,
+  styles,
+} from "./nav-bar.styles";
+import ReadingModeMobileIcon from "./reading-mode-mobile-icon";
 
 function hexToRgba(hex: string, alpha: number): string {
   const clean = hex.replace("#", "").trim();
@@ -26,41 +38,104 @@ function hexToRgba(hex: string, alpha: number): string {
 
 export default function NavBar() {
   const { colors } = useAppearance();
+  const { toDiscussEnabled } = useSettings();
   const { screen, setScreen } = useNavDirection();
 
-  const activeIndex = screen === "settings" ? 1 : 0;
+  const tabs = getVisibleTabs(toDiscussEnabled);
+  const activeIndex = getTabIndex(screen, toDiscussEnabled);
+
+  const tabsRef = useRef<ScreenKey[]>(tabs);
+  const activeIndexRef = useRef(activeIndex);
+  const setScreenRef = useRef(setScreen);
+  tabsRef.current = tabs;
+  activeIndexRef.current = activeIndex;
+  setScreenRef.current = setScreen;
 
   const scaleCalendar = useRef(new Animated.Value(1)).current;
+  const scaleToDiscuss = useRef(new Animated.Value(1)).current;
   const scaleSettings = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.spring(scaleCalendar, {
-      toValue: activeIndex === 0 ? 1.18 : 1,
+      toValue: screen === "calendar" ? 1.18 : 1,
+      useNativeDriver: true,
+      damping: 18,
+      stiffness: 340,
+    }).start();
+    Animated.spring(scaleToDiscuss, {
+      toValue: screen === "to-discuss" ? 1.18 : 1,
       useNativeDriver: true,
       damping: 18,
       stiffness: 340,
     }).start();
     Animated.spring(scaleSettings, {
-      toValue: activeIndex === 1 ? 1.18 : 1,
+      toValue: screen === "settings" ? 1.18 : 1,
       useNativeDriver: true,
       damping: 18,
       stiffness: 340,
     }).start();
-  }, [activeIndex]);
+  }, [screen]);
 
-  const goTo = (index: number) => {
-    if (index === activeIndex) return;
-    setScreen(index === 0 ? "calendar" : "settings");
+  const goTo = (target: ScreenKey) => {
+    if (target === screen) return;
+    setScreen(target);
   };
 
-  const swipePan = PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) =>
-      Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
-    onPanResponderRelease: (_, g) => {
-      if (g.dx < -12 && activeIndex === 0) goTo(1);
-      else if (g.dx > 12 && activeIndex === 1) goTo(0);
-    },
-  });
+  const swipePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderRelease: (_, g) => {
+        const nextIdx = getNextTabIndexOnSwipe(
+          activeIndexRef.current,
+          g.dx,
+          tabsRef.current.length,
+          12,
+        );
+        if (nextIdx !== null) {
+          setScreenRef.current(tabsRef.current[nextIdx]);
+        }
+      },
+    }),
+  ).current;
+
+  const renderIcon = (key: ScreenKey) => {
+    const isActive = screen === key;
+    if (key === "calendar") {
+      return (
+        <Animated.View style={{ transform: [{ scale: scaleCalendar }] }}>
+          <Ionicons
+            name={isActive ? "calendar" : "calendar-outline"}
+            size={26}
+            color={isActive ? colors.text : colors.textSecondary}
+          />
+        </Animated.View>
+      );
+    }
+    if (key === "to-discuss") {
+      return (
+        <Animated.View style={{ transform: [{ scale: scaleToDiscuss }] }}>
+          <ReadingModeMobileIcon
+            size={26}
+            color={isActive ? colors.text : colors.textSecondary}
+            cutoutColor={colors.background}
+            filled={isActive}
+          />
+        </Animated.View>
+      );
+    }
+    return (
+      <Animated.View style={{ transform: [{ scale: scaleSettings }] }}>
+        <Ionicons
+          name={isActive ? "settings" : "settings-outline"}
+          size={26}
+          color={isActive ? colors.text : colors.textSecondary}
+        />
+      </Animated.View>
+    );
+  };
+
+  const isTriple = tabs.length === 3;
 
   return (
     <View
@@ -77,25 +152,34 @@ export default function NavBar() {
         <Ionicons name="chevron-back" size={16} color={colors.textSecondary} />
       </View>
 
-      <Pressable onPress={() => goTo(0)} style={styles.button}>
-        <Animated.View style={{ transform: [{ scale: scaleCalendar }] }}>
-          <Ionicons
-            name={activeIndex === 0 ? "calendar" : "calendar-outline"}
-            size={26}
-            color={activeIndex === 0 ? colors.text : colors.textSecondary}
-          />
-        </Animated.View>
-      </Pressable>
-
-      <Pressable onPress={() => goTo(1)} style={styles.button}>
-        <Animated.View style={{ transform: [{ scale: scaleSettings }] }}>
-          <Ionicons
-            name={activeIndex === 1 ? "settings" : "settings-outline"}
-            size={26}
-            color={activeIndex === 1 ? colors.text : colors.textSecondary}
-          />
-        </Animated.View>
-      </Pressable>
+      {tabs.map((key, index) => {
+        const isFirst = index === 0;
+        const isLast = index === tabs.length - 1;
+        const isMiddle = isTriple && index === 1;
+        return (
+          <Pressable
+            key={key}
+            onPress={() => goTo(key)}
+            style={[
+              styles.button,
+              isTriple &&
+                (isMiddle
+                  ? { width: MIDDLE_BUTTON_WIDTH }
+                  : {
+                      width: OUTER_BUTTON_WIDTH,
+                      marginLeft: isFirst ? 10 : 0,
+                      marginRight: isLast ? 10 : 0,
+                    }),
+              !isTriple && {
+                marginLeft: isFirst ? 4 : 0,
+                marginRight: isLast ? 4 : 0,
+              },
+            ]}
+          >
+            {renderIcon(key)}
+          </Pressable>
+        );
+      })}
 
       <View style={[styles.hintWrap, styles.hintRight, { opacity: 0.35 }]}>
         <Ionicons

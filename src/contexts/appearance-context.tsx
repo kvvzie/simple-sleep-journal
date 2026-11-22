@@ -1,5 +1,6 @@
 import { buildConfig } from "@/constants/build-config";
 import { DEFAULT_FEATURE_FLAGS, DEFAULT_THEME } from "@/constants/default-theme";
+import { useSettings } from "@/contexts/settings-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import { readTextFileFromUri, saveFileToDevice } from "@/lib/file-saver";
 import {
@@ -57,6 +58,7 @@ const STORAGE_KEY = `sleepinapp.appearance_${buildConfig.mode}_v4`;
 
 export function AppearanceProvider({ children }: { children: React.ReactNode }) {
   const scheme = useAppColorScheme();
+  const { toDiscussEnabled, setToDiscussEnabled } = useSettings();
   const [theme, setTheme] = useState<AppTheme>(() => {
     if (buildConfig.mode === "baked") {
       return buildConfig.bakedTheme;
@@ -97,6 +99,9 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
         if (buildConfig.mode === "baked") {
           setTheme(buildConfig.bakedTheme);
           setFeatures(buildConfig.features);
+          if (typeof buildConfig.features.toDiscussDefaultEnabled === "boolean") {
+            setToDiscussEnabled(buildConfig.features.toDiscussDefaultEnabled);
+          }
         } else {
           setTheme(DEFAULT_THEME);
           setFeatures(buildConfig.features);
@@ -229,8 +234,9 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     );
     setTheme(defaults.theme);
     setFeatures(defaults.features);
+    setToDiscussEnabled(defaults.features.toDiscussDefaultEnabled ?? true);
     await AsyncStorage.removeItem(STORAGE_KEY);
-  }, []);
+  }, [setToDiscussEnabled]);
 
   const exportTheme = useCallback(
     async (customName?: string) => {
@@ -266,7 +272,10 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
           calendar: cal,
           settings: sett,
         },
-        features: effectiveFeatures,
+        features: {
+          ...effectiveFeatures,
+          toDiscussDefaultEnabled: toDiscussEnabled,
+        },
       };
 
       const fileData = serializeMoodTheme(activeTheme);
@@ -279,7 +288,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
         mimeType: "application/json",
       });
     },
-    [theme, effectiveFeatures],
+    [theme, effectiveFeatures, toDiscussEnabled],
   );
 
   const importThemeData = useCallback(async (raw: unknown) => {
@@ -314,6 +323,9 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
         ...safeTheme.features,
         inAppCustomizationEnabled: buildConfig.mode === "dynamic",
       }));
+      if (typeof safeTheme.features.toDiscussDefaultEnabled === "boolean") {
+        setToDiscussEnabled(safeTheme.features.toDiscussDefaultEnabled);
+      }
     }
 
     await AsyncStorage.setItem(
@@ -326,7 +338,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     ).catch(() => {});
 
     return { success: true };
-  }, [features]);
+  }, [features, setToDiscussEnabled]);
 
   const importThemeFromFile = useCallback(async () => {
     try {

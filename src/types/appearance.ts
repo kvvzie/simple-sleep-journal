@@ -25,6 +25,9 @@ export type FeatureFlags = {
   bodyCareEnabled: boolean;
   moodStarsEnabled: boolean;
   commentsEnabled: boolean;
+  todoListEnabled: boolean;
+  toDiscussToggleEnabled: boolean;
+  toDiscussDefaultEnabled?: boolean;
   gridPickerEnabled: boolean;
   inAppCustomizationEnabled: boolean;
 };

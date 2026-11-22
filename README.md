@@ -19,6 +19,7 @@ A minimalist, privacy-first, offline sleep and mood journal with an optional raz
 - **Hours Cyclical Wheel Picker**: Infinite vertical pager cycling from 0h to 24h.
 - **Mood Star Rating**: Scrubbable 10-star rating row.
 - **Daily Notes / Comments**: Auto-saving note box with custom placeholder formatting.
+- **Daily To-Do List**: Centered task checklist below comments with 3-day carry-over (`created_date + 3 days`), inline add (`+ new task`) and edit modes, elapsed-hour timestamps (`(<1 hours ago)` up to `(>96 hours ago)`), and deletion confirmation dialogs.
 - **Body Care / Razor Blade Tracker**:
   - Track 4 quadrants per blade (`top-left`, `top-right`, `bottom-left`, `bottom-right`).
   - Supported brands: Astra Superior Platinum, Gillette Platinum, Isana Men Classic.
@@ -45,7 +46,7 @@ Theme looks are self-contained in `.moodtheme` JSON files:
 - 100% portable across Android, iOS, and devices without network dependencies.
 
 ### 5. Data Export & Storage Access Framework (SAF)
-- **Export formats**: JSON Backup (full database dump), CSV Spreadsheet (RFC 4180 compliant), and Plain Text Summary.
+- **Export formats**: JSON Backup (full database dump including `todos` and backward-compatible legacy imports), CSV Spreadsheet (RFC 4180 compliant with `todo` status/timestamps), and Plain Text Summary.
 - **Android SAF Compliant**: Uses `@react-native-documents/picker` with an automatic 4-tier fallback cascade to handle transient intent URIs, remembered directory permissions, and system share sheet.
 
 ---

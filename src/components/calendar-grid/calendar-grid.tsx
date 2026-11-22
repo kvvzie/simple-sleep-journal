@@ -1,11 +1,9 @@
 import { useAppearance } from "@/contexts/appearance-context";
 import { useSettings } from "@/contexts/settings-context";
-import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import { getAllLoggedDates, getMonthLogs, initDB } from "@/lib/db";
 import { FontVariant } from "@/lib/theme-utils";
 import { ThemePaletteColors } from "@/types/appearance";
 import { Ionicons } from "@expo/vector-icons";
-import { StatusBar } from "expo-status-bar";
 import {
   memo,
   useCallback,
@@ -350,7 +348,6 @@ const GridPage = memo(function GridPage({
 });
 
 function CalendarGrid() {
-  const scheme = useAppColorScheme();
   const { colors, resolveFont, backgrounds } = useAppearance();
   const { rows, columns } = useSettings();
   const totalCells = rows * columns;
@@ -826,8 +823,6 @@ function CalendarGrid() {
         },
       ]}
     >
-      <StatusBar style={scheme === "dark" ? "light" : "dark"} animated />
-
       <View
         pointerEvents="none"
         collapsable={false}

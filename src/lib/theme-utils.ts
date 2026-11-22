@@ -130,6 +130,15 @@ export function parseAndValidateMoodTheme(
     if (typeof rawFeat.commentsEnabled === "boolean") {
       features.commentsEnabled = rawFeat.commentsEnabled;
     }
+    if (typeof rawFeat.todoListEnabled === "boolean") {
+      features.todoListEnabled = rawFeat.todoListEnabled;
+    }
+    if (typeof rawFeat.toDiscussToggleEnabled === "boolean") {
+      features.toDiscussToggleEnabled = rawFeat.toDiscussToggleEnabled;
+    }
+    if (typeof rawFeat.toDiscussDefaultEnabled === "boolean") {
+      features.toDiscussDefaultEnabled = rawFeat.toDiscussDefaultEnabled;
+    }
     if (typeof rawFeat.gridPickerEnabled === "boolean") {
       features.gridPickerEnabled = rawFeat.gridPickerEnabled;
     }
@@ -233,6 +242,26 @@ export function isThemeModifiedFromDefaults(
     if (
       activeFeatures.commentsEnabled !== undefined &&
       activeFeatures.commentsEnabled !== targetFeatures.commentsEnabled
+    ) {
+      return true;
+    }
+    if (
+      activeFeatures.todoListEnabled !== undefined &&
+      activeFeatures.todoListEnabled !== targetFeatures.todoListEnabled
+    ) {
+      return true;
+    }
+    if (
+      activeFeatures.toDiscussToggleEnabled !== undefined &&
+      activeFeatures.toDiscussToggleEnabled !== targetFeatures.toDiscussToggleEnabled
+    ) {
+      return true;
+    }
+    if (
+      activeFeatures.toDiscussToggleEnabled === false &&
+      activeFeatures.toDiscussDefaultEnabled !== undefined &&
+      activeFeatures.toDiscussDefaultEnabled !==
+        (targetFeatures.toDiscussDefaultEnabled ?? true)
     ) {
       return true;
     }

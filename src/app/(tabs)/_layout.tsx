@@ -1,8 +1,11 @@
 import CalendarGrid from "@/components/calendar-grid";
 import NavBar from "@/components/nav-bar";
 import Settings from "@/components/settings";
+import ToDiscuss from "@/components/to-discuss";
 import { useAppearance } from "@/contexts/appearance-context";
 import { useNavDirection } from "@/contexts/nav-direction-context";
+import { getNavProgress, type ScreenKey } from "@/contexts/nav-utils";
+import { useSettings } from "@/contexts/settings-context";
 import { Image } from "expo-image";
 import { useEffect, useRef } from "react";
 import {
@@ -14,19 +17,59 @@ import {
 
 export default function TabsLayout() {
   const { screen } = useNavDirection();
+  const { toDiscussEnabled } = useSettings();
   const { width } = useWindowDimensions();
-  const translateX = useRef(new Animated.Value(0)).current;
   const { colors, backgrounds } = useAppearance();
 
+  const targetProgress = getNavProgress(screen);
+  const navProgress = useRef(new Animated.Value(targetProgress)).current;
+  const prevScreenRef = useRef<ScreenKey>(screen);
+
   useEffect(() => {
-    Animated.spring(translateX, {
-      toValue: screen === "calendar" ? 0 : -width,
+    if (prevScreenRef.current === screen) return;
+    prevScreenRef.current = screen;
+    Animated.spring(navProgress, {
+      toValue: targetProgress,
       useNativeDriver: true,
       damping: 22,
       stiffness: 220,
       mass: 0.9,
     }).start();
-  }, [screen, width]);
+  }, [screen, targetProgress, navProgress]);
+
+  const calendarTranslateX = toDiscussEnabled
+    ? navProgress.interpolate({
+        inputRange: [0, 0.5, 1],
+        outputRange: [0, -width, -width * 2],
+      })
+    : navProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, -width],
+      });
+
+  const toDiscussTranslateX = navProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [width, 0, -width],
+  });
+
+  const settingsTranslateX = toDiscussEnabled
+    ? navProgress.interpolate({
+        inputRange: [0, 0.5, 1],
+        outputRange: [width * 2, width, 0],
+      })
+    : navProgress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [width, 0],
+      });
+
+  const baseTabStyle = {
+    position: "absolute" as const,
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width,
+    backgroundColor: colors.background,
+  };
 
   return (
     <View
@@ -37,38 +80,56 @@ export default function TabsLayout() {
       }}
     >
       <Animated.View
-        style={{
-          flexDirection: "row",
-          width: width * 2,
-          height: "100%",
-          backgroundColor: colors.background,
-          transform: [{ translateX }],
-        }}
+        key="calendar"
+        pointerEvents={screen === "calendar" ? "auto" : "none"}
+        style={[
+          baseTabStyle,
+          { transform: [{ translateX: calendarTranslateX }] },
+        ]}
       >
-        <View style={{ width, height: "100%", backgroundColor: colors.background }}>
-          {backgrounds.calendar && (
-            <Image
-              source={{ uri: backgrounds.calendar }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          )}
-          <CalendarGrid />
-        </View>
-
-        <View style={{ width, height: "100%", backgroundColor: colors.background }}>
-          {backgrounds.settings && (
-            <Image
-              source={{ uri: backgrounds.settings }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          )}
-          <Settings />
-        </View>
+        {backgrounds.calendar && (
+          <Image
+            source={{ uri: backgrounds.calendar }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        )}
+        <CalendarGrid />
       </Animated.View>
+
+      {toDiscussEnabled && (
+        <Animated.View
+          key="to-discuss"
+          pointerEvents={screen === "to-discuss" ? "auto" : "none"}
+          style={[
+            baseTabStyle,
+            { transform: [{ translateX: toDiscussTranslateX }] },
+          ]}
+        >
+          <ToDiscuss />
+        </Animated.View>
+      )}
+
+      <Animated.View
+        key="settings"
+        pointerEvents={screen === "settings" ? "auto" : "none"}
+        style={[
+          baseTabStyle,
+          { transform: [{ translateX: settingsTranslateX }] },
+        ]}
+      >
+        {backgrounds.settings && (
+          <Image
+            source={{ uri: backgrounds.settings }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+          />
+        )}
+        <Settings />
+      </Animated.View>
+
       <NavBar />
     </View>
   );

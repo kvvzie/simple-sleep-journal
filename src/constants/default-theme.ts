@@ -36,6 +36,9 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   bodyCareEnabled: false,
   moodStarsEnabled: true,
   commentsEnabled: true,
+  todoListEnabled: true,
+  toDiscussToggleEnabled: true,
+  toDiscussDefaultEnabled: true,
   gridPickerEnabled: true,
   inAppCustomizationEnabled: false,
 };

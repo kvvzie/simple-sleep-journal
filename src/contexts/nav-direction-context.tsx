@@ -1,6 +1,8 @@
-import { createContext, useContext, useState } from "react";
+import { useSettings } from "@/contexts/settings-context";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { resolveVisibleScreen, type ScreenKey } from "./nav-utils";
 
-type ScreenKey = "calendar" | "settings";
+export type { ScreenKey };
 
 type NavDirectionState = {
   screen: ScreenKey;
@@ -14,9 +16,27 @@ export function NavDirectionProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { toDiscussEnabled } = useSettings();
   const [screen, setScreen] = useState<ScreenKey>("calendar");
+
+  useEffect(() => {
+    if (!toDiscussEnabled && screen === "to-discuss") {
+      setScreen("calendar");
+    }
+  }, [toDiscussEnabled, screen]);
+
+  const effectiveScreen = resolveVisibleScreen(screen, toDiscussEnabled);
+
+  const value = useMemo(
+    () => ({
+      screen: effectiveScreen,
+      setScreen,
+    }),
+    [effectiveScreen],
+  );
+
   return (
-    <NavDirectionContext.Provider value={{ screen, setScreen }}>
+    <NavDirectionContext.Provider value={value}>
       {children}
     </NavDirectionContext.Provider>
   );
