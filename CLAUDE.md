@@ -2,7 +2,7 @@
 
 ## Project Summary
 - Minimalist sleep & mood journal with a body care / shaving razor blade wear tracker.
-- Built with Expo SDK 57, React Native 0.86, React 19, TypeScript.
+- Built with Expo SDK 58, React Native 0.88, React 19, TypeScript.
 - Custom typography: Redaction font family.
 - Storage: Local SQLite database via `expo-sqlite`, settings via `@react-native-async-storage/async-storage`.
 
