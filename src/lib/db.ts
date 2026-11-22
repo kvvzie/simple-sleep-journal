@@ -359,6 +359,15 @@ export async function getMonthLogs(year: number, month: number) {
   );
 }
 
+export async function getAllLoggedDates(): Promise<string[]> {
+  return withDb(async (db) => {
+    const rows = await db.getAllAsync<{ date: string }>(
+      "SELECT date FROM sleep_logs",
+    );
+    return rows.map((r) => r.date);
+  });
+}
+
 export async function deleteSleepLog(date: string) {
   await withDb(async (db) => {
     await db.runAsync("DELETE FROM sleep_log_edits WHERE log_date = ?", [date]);

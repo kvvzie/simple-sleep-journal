@@ -30,6 +30,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ViewInstance,
 } from "react-native";
 import ConfirmDialog from "../confirm-dialog";
 import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
@@ -425,7 +426,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     return Math.max(1, Math.min(10, idx + 1));
   };
 
-  const starsRowRef = useRef<View>(null);
+  const starsRowRef = useRef<ViewInstance>(null);
   const rowOriginX = useRef(0);
 
   const measureStarsRow = () => {
@@ -539,7 +540,9 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     : null;
 
   const bodyCareImageAspectRatio =
-    bodyCareImageAsset && bodyCareImageAsset.height > 0
+    bodyCareImageAsset?.width != null &&
+    bodyCareImageAsset?.height != null &&
+    bodyCareImageAsset.height > 0
       ? bodyCareImageAsset.width / bodyCareImageAsset.height
       : 1;
 

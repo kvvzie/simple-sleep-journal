@@ -1,8 +1,16 @@
 import assert from "node:assert";
 import test from "node:test";
 import {
+  computeWidthScale,
+  evaluatePageSelected,
   getCalendarDays,
+  getMonthKey,
+  getScaledMeasuredWidth,
+  getSwipeTargetPage,
+  groupDatesByMonth,
+  isScrollSettled,
   MONTH_NAMES,
+  resolveCanceledSwipePage,
 } from "../src/components/calendar-grid/calendar-grid.utils.ts";
 
 test("MONTH_NAMES contains all 12 lowercase months", () => {
@@ -62,4 +70,174 @@ test("getCalendarDays formats date strings with two-digit zero padding", () => {
   const day9 = days.find((d) => d.day === 9 && d.type !== "otherMonth");
   assert.ok(day9);
   assert.strictEqual(day9.dateStr, "2026-01-09");
+});
+
+test("getMonthKey formats zero-indexed months as YYYY-MM", () => {
+  assert.strictEqual(getMonthKey(2026, 0), "2026-01");
+  assert.strictEqual(getMonthKey(2026, 9), "2026-10");
+  assert.strictEqual(getMonthKey(2026, 11), "2026-12");
+});
+
+test("groupDatesByMonth partitions dates into month sets and skips malformed entries", () => {
+  const grouped = groupDatesByMonth([
+    "2026-10-01",
+    "2026-10-15",
+    "2026-11-02",
+    "2025-11-02",
+    "bad",
+  ]);
+  assert.deepStrictEqual([...(grouped.get("2026-10") ?? [])], [
+    "2026-10-01",
+    "2026-10-15",
+  ]);
+  assert.deepStrictEqual([...(grouped.get("2026-11") ?? [])], ["2026-11-02"]);
+  assert.deepStrictEqual([...(grouped.get("2025-11") ?? [])], ["2025-11-02"]);
+  assert.strictEqual(grouped.size, 3);
+});
+
+test("computeWidthScale and getScaledMeasuredWidth fit wide labels within bounds", () => {
+  const widths = { 4: 110, 8: 350 };
+  assert.strictEqual(computeWidthScale(widths, 400, 0.65), 1);
+  const scale = computeWidthScale(widths, 280, 0.65);
+  assert.strictEqual(scale, 280 / 350);
+  assert.strictEqual(getScaledMeasuredWidth(widths, 8, scale, 280), 280);
+  assert.strictEqual(getScaledMeasuredWidth(widths, 4, scale, 280), 88);
+  assert.strictEqual(computeWidthScale({ 8: 600 }, 280, 0.65), 0.65);
+});
+
+test("getSwipeTargetPage triggers immediately past threshold and clamps bounds", () => {
+  assert.strictEqual(getSwipeTargetPage(60.0, 60, 0.06, 0, 120), null);
+  assert.strictEqual(getSwipeTargetPage(59.95, 60, 0.06, 0, 120), null);
+  assert.strictEqual(getSwipeTargetPage(60.05, 60, 0.06, 0, 120), null);
+  assert.strictEqual(getSwipeTargetPage(59.94, 60, 0.06, 0, 120), 59);
+  assert.strictEqual(getSwipeTargetPage(60.06, 60, 0.06, 0, 120), 61);
+  assert.strictEqual(getSwipeTargetPage(-0.1, 0, 0.06, 0, 120), 0);
+  assert.strictEqual(getSwipeTargetPage(120.1, 120, 0.06, 0, 120), 120);
+});
+
+test("evaluatePageSelected ignores stale double-swipe and peer events while accepting valid reconciliations", () => {
+  assert.strictEqual(
+    evaluatePageSelected({
+      pos: 57,
+      expectedProgrammaticPage: 58,
+      activeManualSource: "grid",
+      isDragging: false,
+      lastScrollPos: 57.4,
+      currentPage: 58,
+    }),
+    "ignore",
+  );
+  assert.strictEqual(
+    evaluatePageSelected({
+      pos: 58,
+      expectedProgrammaticPage: 58,
+      activeManualSource: null,
+      isDragging: false,
+      lastScrollPos: 58,
+      currentPage: 58,
+    }),
+    "acknowledge-programmatic",
+  );
+  assert.strictEqual(
+    evaluatePageSelected({
+      pos: 57,
+      expectedProgrammaticPage: undefined,
+      activeManualSource: "grid",
+      isDragging: true,
+      lastScrollPos: 57.2,
+      currentPage: 58,
+    }),
+    "ignore",
+  );
+  assert.strictEqual(
+    evaluatePageSelected({
+      pos: 57,
+      expectedProgrammaticPage: undefined,
+      activeManualSource: null,
+      isDragging: false,
+      lastScrollPos: 57.6,
+      currentPage: 58,
+    }),
+    "ignore",
+  );
+  assert.strictEqual(
+    evaluatePageSelected({
+      pos: 56,
+      expectedProgrammaticPage: undefined,
+      activeManualSource: null,
+      isDragging: false,
+      lastScrollPos: 56.02,
+      currentPage: 57,
+    }),
+    "reconcile",
+  );
+});
+
+test("isScrollSettled and resolveCanceledSwipePage avoid premature idle reversion while restoring canceled swipes at zero offset", () => {
+  assert.strictEqual(isScrollSettled(0), true);
+  assert.strictEqual(isScrollSettled(0.002), true);
+  assert.strictEqual(isScrollSettled(0.2), false);
+
+  // Premature idle at offset = 0.2 must NOT revert 59 -> 58
+  assert.strictEqual(
+    resolveCanceledSwipePage({
+      scrollPos: 58.2,
+      offset: 0.2,
+      dragAnchor: 58,
+      hadMovedInGesture: true,
+      currentTarget: 59,
+      isDragging: false,
+    }),
+    null,
+  );
+
+  // Normal completion on 59 at offset = 0 performs no reversion
+  assert.strictEqual(
+    resolveCanceledSwipePage({
+      scrollPos: 59,
+      offset: 0,
+      dragAnchor: 58,
+      hadMovedInGesture: true,
+      currentTarget: 59,
+      isDragging: false,
+    }),
+    null,
+  );
+
+  // Genuine snap-back to dragAnchor 58 at offset = 0 reconciles back to 58
+  assert.strictEqual(
+    resolveCanceledSwipePage({
+      scrollPos: 58,
+      offset: 0,
+      dragAnchor: 58,
+      hadMovedInGesture: true,
+      currentTarget: 59,
+      isDragging: false,
+    }),
+    58,
+  );
+});
+
+test("getCalendarDays classifies past, today, and future days accurately", () => {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const d = now.getDate();
+
+  const pastDays = getCalendarDays(y - 1, m, new Set(), 35).filter(
+    (item) => item.type !== "otherMonth",
+  );
+  assert.ok(pastDays.every((item) => item.type === "unlogged"));
+
+  const futureDays = getCalendarDays(y + 1, m, new Set(), 35).filter(
+    (item) => item.type !== "otherMonth",
+  );
+  assert.ok(futureDays.every((item) => item.type === "future"));
+
+  const currentDays = getCalendarDays(y, m, new Set(), 35);
+  const todayCell = currentDays.find(
+    (item) => item.day === d && item.type !== "otherMonth",
+  );
+  assert.ok(todayCell);
+  assert.strictEqual(todayCell.type, "today");
 });

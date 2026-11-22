@@ -48,4 +48,10 @@ export const styles = StyleSheet.create({
   dayCell: { width: "20%", paddingVertical: 18 },
   dayText: { fontSize: 36, textAlign: "center" },
   pager: { marginTop: 10 },
+  measureOverlay: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    opacity: 0,
+  },
 });

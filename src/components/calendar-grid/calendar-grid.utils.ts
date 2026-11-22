@@ -64,6 +64,145 @@ export function getDayCellWidth(containerWidth: number, columns: number) {
   return Math.floor(containerWidth / columns);
 }
 
+export function getMonthKey(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+export function groupDatesByMonth(dates: string[]): Map<string, Set<string>> {
+  const byMonth = new Map<string, Set<string>>();
+  for (const dateStr of dates) {
+    if (dateStr.length < 7) continue;
+    const key = dateStr.slice(0, 7);
+    let set = byMonth.get(key);
+    if (!set) {
+      set = new Set<string>();
+      byMonth.set(key, set);
+    }
+    set.add(dateStr);
+  }
+  return byMonth;
+}
+
+export function computeWidthScale(
+  widths: Record<number, number> | undefined,
+  maxWidth: number,
+  minScale: number,
+): number {
+  if (!widths || maxWidth <= 0) return 1;
+  let widest = 0;
+  for (const w of Object.values(widths)) {
+    if (w > widest) widest = w;
+  }
+  if (widest <= maxWidth) return 1;
+  return Math.max(minScale, maxWidth / widest);
+}
+
+export function getScaledMeasuredWidth(
+  widths: Record<number, number> | undefined,
+  key: number,
+  scale: number,
+  maxWidth: number,
+): number | undefined {
+  const raw = widths?.[key];
+  if (raw === undefined) return undefined;
+  return Math.min(maxWidth, raw * scale);
+}
+
+export function getSwipeTargetPage(
+  scrollPos: number,
+  anchorPage: number,
+  threshold: number,
+  minPage: number,
+  maxPage: number,
+): number | null {
+  const delta = scrollPos - anchorPage;
+  if (delta <= -threshold) {
+    return Math.max(minPage, anchorPage - 1);
+  }
+  if (delta >= threshold) {
+    return Math.min(maxPage, anchorPage + 1);
+  }
+  return null;
+}
+
+export type PageSelectedDecision =
+  | "ignore"
+  | "acknowledge-programmatic"
+  | "reconcile";
+
+export function evaluatePageSelected(options: {
+  pos: number;
+  expectedProgrammaticPage: number | undefined;
+  activeManualSource: string | null;
+  isDragging: boolean;
+  lastScrollPos: number | undefined;
+  currentPage: number;
+}): PageSelectedDecision {
+  const {
+    pos,
+    expectedProgrammaticPage,
+    activeManualSource,
+    isDragging,
+    lastScrollPos,
+    currentPage,
+  } = options;
+
+  if (expectedProgrammaticPage !== undefined) {
+    return pos === expectedProgrammaticPage
+      ? "acknowledge-programmatic"
+      : "ignore";
+  }
+
+  if (activeManualSource !== null || isDragging) {
+    return "ignore";
+  }
+
+  if (pos === currentPage) {
+    return "ignore";
+  }
+
+  if (lastScrollPos !== undefined && Math.abs(lastScrollPos - pos) > 0.15) {
+    return "ignore";
+  }
+
+  return "reconcile";
+}
+
+export function isScrollSettled(offset: number): boolean {
+  return Math.abs(offset) < 0.005;
+}
+
+export function resolveCanceledSwipePage(options: {
+  scrollPos: number;
+  offset: number;
+  dragAnchor: number | null;
+  hadMovedInGesture: boolean;
+  currentTarget: number;
+  isDragging: boolean;
+}): number | null {
+  const {
+    scrollPos,
+    offset,
+    dragAnchor,
+    hadMovedInGesture,
+    currentTarget,
+    isDragging,
+  } = options;
+  if (
+    isDragging ||
+    !hadMovedInGesture ||
+    dragAnchor === null ||
+    !isScrollSettled(offset)
+  ) {
+    return null;
+  }
+  const settledPos = Math.round(scrollPos);
+  if (settledPos === dragAnchor && settledPos !== currentTarget) {
+    return settledPos;
+  }
+  return null;
+}
+
 export function getCalendarDays(
   year: number,
   month: number,
@@ -73,14 +212,18 @@ export function getCalendarDays(
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const days: CalendarDay[] = [];
   const today = new Date();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+  const todayDay = today.getDate();
+  const monthKey = getMonthKey(year, month);
+  const isCurrentMonth = year === todayYear && month === todayMonth;
+  const isFutureMonth =
+    year > todayYear || (year === todayYear && month > todayMonth);
 
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const isToday =
-      d === today.getDate() &&
-      month === today.getMonth() &&
-      year === today.getFullYear();
-    const isFuture = new Date(year, month, d) > today && !isToday;
+    const dateStr = `${monthKey}-${String(d).padStart(2, "0")}`;
+    const isToday = isCurrentMonth && d === todayDay;
+    const isFuture = isFutureMonth || (isCurrentMonth && d > todayDay);
     const isLogged = loggedDates.has(dateStr);
 
     let type: DayType = "unlogged";
