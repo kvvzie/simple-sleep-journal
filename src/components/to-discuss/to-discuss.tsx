@@ -83,7 +83,7 @@ const HALF_PAGE_COUNT = YEAR_PAGE_COUNT * 2;
 const QUARTER_PAGE_COUNT = YEAR_PAGE_COUNT * 4;
 const MONTH_PAGE_COUNT = YEAR_PAGE_COUNT * 12;
 
-const ZOOM_EASE_OUT = Easing.bezier(0.16, 1, 0.3, 1);
+const ZOOM_EASE_OUT = Easing.bezier(0.22, 1, 0.36, 1);
 const HEADER_AND_TITLE_CLEARANCE = 326;
 const PINCH_COOLDOWN_MS = 90;
 
@@ -93,8 +93,13 @@ const QUARTER_NUMS: WeekQuarter[] = [1, 2, 3, 4];
 type PagerKey = "year" | "month" | "grid";
 type ScrollState = "idle" | "dragging" | "settling";
 
+type OverlaySlotIndex = 0 | 1;
+
 type ZoomTransitionData = {
   id: number;
+  slot: OverlaySlotIndex;
+  outgoingSlot: OverlaySlotIndex | null;
+  outgoingScaleMode: "settled" | "enter";
   outgoing: { level: RecapZoomLevel; page: number };
   incoming: { level: RecapZoomLevel; page: number };
   direction: "in" | "out";
@@ -653,16 +658,23 @@ function ToDiscuss() {
 
   const gridScaleAnim = useRef(new Animated.Value(1)).current;
   const pinchScaleAnim = useRef(new Animated.Value(1)).current;
-  const combinedGridScale = useRef(
-    Animated.multiply(gridScaleAnim, pinchScaleAnim),
+  const baseOutgoingScaleAnim = useRef(new Animated.Value(1)).current;
+  const baseGridOpacityAnim = useRef(new Animated.Value(1)).current;
+  const allGridScale = useRef(
+    Animated.multiply(
+      Animated.multiply(gridScaleAnim, pinchScaleAnim),
+      baseOutgoingScaleAnim,
+    ),
   ).current;
 
-  const outgoingScaleAnim = useRef(new Animated.Value(1)).current;
-  const outgoingOpacityAnim = useRef(new Animated.Value(1)).current;
-  const incomingScaleAnim = useRef(new Animated.Value(1)).current;
-  const incomingOpacityAnim = useRef(new Animated.Value(0)).current;
-  const allGridScale = useRef(
-    Animated.multiply(combinedGridScale, outgoingScaleAnim),
+  const overlaySlots = useRef(
+    ([0, 1] as const).map(() => {
+      const opacity = new Animated.Value(0);
+      const enterScale = new Animated.Value(1);
+      const exitScale = new Animated.Value(1);
+      const settledScale = Animated.multiply(pinchScaleAnim, exitScale);
+      return { opacity, enterScale, exitScale, settledScale };
+    }),
   ).current;
 
   const activeTransitionAnimRef = useRef<Animated.CompositeAnimation | null>(
@@ -716,11 +728,9 @@ function ToDiscuss() {
 
   const yearPageIndex = YEAR_CENTER_PAGE + (year - baseYear);
 
-  const cancelTransitionTimers = useCallback(() => {
+  const cancelIncomingTimers = useCallback(() => {
     activeTransitionAnimRef.current?.stop();
     activeTransitionAnimRef.current = null;
-    activeOutgoingAnimRef.current?.stop();
-    activeOutgoingAnimRef.current = null;
     if (hydrationTimerRef.current !== null) {
       clearTimeout(hydrationTimerRef.current);
       hydrationTimerRef.current = null;
@@ -735,6 +745,11 @@ function ToDiscuss() {
     }
   }, []);
 
+  const cancelOutgoingAnim = useCallback(() => {
+    activeOutgoingAnimRef.current?.stop();
+    activeOutgoingAnimRef.current = null;
+  }, []);
+
   const commitZoomHandoff = useCallback(
     (transitionId: number, targetLevel: RecapZoomLevel) => {
       if (
@@ -744,6 +759,9 @@ function ToDiscuss() {
         return;
       }
       handoffReadyIdRef.current = transitionId;
+      if (pagerZoomLevelRef.current === targetLevel) {
+        gridPagerRef.current?.setPageWithoutAnimation(lastSyncedPage.current);
+      }
       pagerZoomLevelRef.current = targetLevel;
       setPagerZoomLevel(targetLevel);
       setHandoffReadyId(transitionId);
@@ -781,22 +799,23 @@ function ToDiscuss() {
 
   useEffect(() => {
     if (!zoomTransition) return;
-    const { id } = zoomTransition;
+    const { id, slot } = zoomTransition;
+    const incomingSlot = overlaySlots[slot];
 
     // Outgoing starts synchronously inside `changeZoomLevel` at t=0; join incoming right after 1 frame
-    // so both layers travel along one continuous optical zoom without lingering overlap.
+    // so the new level glides gently into place without any collapsed inward spring bounce.
     const inAnim = Animated.sequence([
-      Animated.delay(20),
+      Animated.delay(15),
       Animated.parallel([
-        Animated.timing(incomingScaleAnim, {
+        Animated.timing(incomingSlot.enterScale, {
           toValue: 1,
-          duration: 230,
+          duration: 210,
           easing: ZOOM_EASE_OUT,
           useNativeDriver: true,
         }),
-        Animated.timing(incomingOpacityAnim, {
+        Animated.timing(incomingSlot.opacity, {
           toValue: 1,
-          duration: 165,
+          duration: 170,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -810,6 +829,11 @@ function ToDiscuss() {
       inAnim.start(({ finished }) => {
         if (!finished || zoomTransitionRef.current?.id !== id) return;
         activeTransitionAnimRef.current = null;
+        // Outgoing reached opacity 0 ~130ms ago, so resetting pinch/base exit scales here
+        // is completely invisible and aligns `settledScale` (1.0) with `enterScale` (1.0).
+        pinchScaleAnim.setValue(1);
+        baseOutgoingScaleAnim.setValue(1);
+        incomingSlot.exitScale.setValue(1);
         zoomAnimSettledRef.current = true;
         setZoomAnimSettled(true);
         if (prevTouchCountRef.current < 2) {
@@ -824,14 +848,15 @@ function ToDiscuss() {
     });
 
     return () => {
-      cancelTransitionTimers();
+      cancelIncomingTimers();
     };
   }, [
     zoomTransition,
-    cancelTransitionTimers,
+    cancelIncomingTimers,
     commitZoomHandoff,
-    incomingScaleAnim,
-    incomingOpacityAnim,
+    overlaySlots,
+    pinchScaleAnim,
+    baseOutgoingScaleAnim,
   ]);
 
   // Reveal the new pager cleanly after React + Fabric commit `pagerZoomLevel === incoming.level`
@@ -840,11 +865,13 @@ function ToDiscuss() {
     if (!zoomTransition || handoffReadyId !== zoomTransition.id) return;
     if (pagerZoomLevel !== zoomTransition.incoming.level) return;
     const { id } = zoomTransition;
+    // Pre-reveal the freshly mounted target pager at opacity 1 behind the opaque incoming cover
+    // so Fabric rasterizes it before the cover unmounts on the next animation frame.
+    baseOutgoingScaleAnim.setValue(1);
+    baseGridOpacityAnim.setValue(1);
     handoffRafRef.current = requestAnimationFrame(() => {
       handoffRafRef.current = null;
       if (zoomTransitionRef.current?.id !== id) return;
-      outgoingScaleAnim.setValue(1);
-      outgoingOpacityAnim.setValue(1);
       zoomTransitionRef.current = null;
       zoomAnimSettledRef.current = false;
       handoffReadyIdRef.current = null;
@@ -872,8 +899,8 @@ function ToDiscuss() {
     handoffReadyId,
     pagerZoomLevel,
     zoomTransition,
-    outgoingScaleAnim,
-    outgoingOpacityAnim,
+    baseOutgoingScaleAnim,
+    baseGridOpacityAnim,
   ]);
 
   useEffect(() => {
@@ -903,9 +930,10 @@ function ToDiscuss() {
   useEffect(() => {
     return () => {
       headerAnimRef.current?.stop();
-      cancelTransitionTimers();
+      cancelOutgoingAnim();
+      cancelIncomingTimers();
     };
-  }, [cancelTransitionTimers]);
+  }, [cancelIncomingTimers, cancelOutgoingAnim]);
 
   const refreshAllLoggedWeeks = useCallback(async () => {
     const summaries = await getAllWeekTopicSummaries();
@@ -955,9 +983,16 @@ function ToDiscuss() {
     const newPage = Math.max(0, Math.min(maxPage, rawNewPage));
 
     if (zoomTransitionRef.current !== null) {
-      cancelTransitionTimers();
-      outgoingScaleAnim.setValue(1);
-      outgoingOpacityAnim.setValue(1);
+      cancelOutgoingAnim();
+      cancelIncomingTimers();
+      baseOutgoingScaleAnim.setValue(1);
+      baseGridOpacityAnim.setValue(1);
+      pinchScaleAnim.setValue(1);
+      overlaySlots.forEach((slotAnim) => {
+        slotAnim.opacity.setValue(0);
+        slotAnim.enterScale.setValue(1);
+        slotAnim.exitScale.setValue(1);
+      });
       zoomTransitionRef.current = null;
       zoomAnimSettledRef.current = false;
       handoffReadyIdRef.current = null;
@@ -1044,7 +1079,8 @@ function ToDiscuss() {
         Math.min(YEAR_PAGE_COUNT - 1, YEAR_CENTER_PAGE + (nextYear - baseYear)),
       );
 
-      cancelTransitionTimers();
+      cancelOutgoingAnim();
+      cancelIncomingTimers();
 
       const prevYearPage = lastYearPage.current;
       scrollStates.current = { year: "idle", month: "idle", grid: "idle" };
@@ -1099,24 +1135,67 @@ function ToDiscuss() {
         });
       }
 
-      outgoingOpacityAnim.setValue(1);
-      outgoingScaleAnim.setValue(fromScale);
-      pinchScaleAnim.setValue(1);
+      const prevTransition = zoomTransitionRef.current;
+      const prevWasSettled = zoomAnimSettledRef.current;
+      const nextId = ++zoomTransitionIdRef.current;
+      const nextSlot: OverlaySlotIndex = (nextId % 2) as OverlaySlotIndex;
+      const reuseBaseGrid =
+        prevLevel === pagerZoomLevelRef.current || prevTransition === null;
+      const outgoingSlot: OverlaySlotIndex | null = reuseBaseGrid
+        ? null
+        : prevTransition.slot;
+      const outgoingScaleMode: "settled" | "enter" =
+        outgoingSlot !== null && !prevWasSettled ? "enter" : "settled";
 
       const outEndScale =
         direction === "in"
-          ? Math.max(fromScale * 1.22, fromScale + 0.24)
-          : Math.min(fromScale * 0.78, fromScale - 0.22);
+          ? Math.max(fromScale + 0.14, 1.15)
+          : Math.min(fromScale - 0.12, 0.87);
+      const safeFromScale = fromPinch ? Math.max(0.5, fromScale) : 1;
+      const relativeEndScale = outEndScale / safeFromScale;
+
+      let outScaleTarget: Animated.Value;
+      let outOpacityTarget: Animated.Value;
+      let outScaleToValue: number;
+
+      if (outgoingSlot === null) {
+        if (!fromPinch) {
+          pinchScaleAnim.setValue(1);
+        }
+        baseGridOpacityAnim.setValue(1);
+        baseOutgoingScaleAnim.setValue(1);
+        outScaleTarget = baseOutgoingScaleAnim;
+        outOpacityTarget = baseGridOpacityAnim;
+        outScaleToValue = relativeEndScale;
+      } else {
+        baseGridOpacityAnim.setValue(0);
+        const prevSlotAnim = overlaySlots[outgoingSlot];
+        outOpacityTarget = prevSlotAnim.opacity;
+        if (outgoingScaleMode === "settled") {
+          if (!fromPinch) {
+            pinchScaleAnim.setValue(1);
+          }
+          prevSlotAnim.opacity.setValue(1);
+          prevSlotAnim.exitScale.setValue(1);
+          outScaleTarget = prevSlotAnim.exitScale;
+          outScaleToValue = relativeEndScale;
+        } else {
+          pinchScaleAnim.setValue(1);
+          outScaleTarget = prevSlotAnim.enterScale;
+          outScaleToValue = outEndScale;
+        }
+      }
+
       const outAnim = Animated.parallel([
-        Animated.timing(outgoingScaleAnim, {
-          toValue: outEndScale,
-          duration: 200,
-          easing: Easing.bezier(0.22, 1, 0.36, 1),
+        Animated.timing(outScaleTarget, {
+          toValue: outScaleToValue,
+          duration: 165,
+          easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(outgoingOpacityAnim, {
+        Animated.timing(outOpacityTarget, {
           toValue: 0,
-          duration: 115,
+          duration: 110,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
@@ -1128,22 +1207,24 @@ function ToDiscuss() {
         }
       });
 
-      incomingOpacityAnim.setValue(0);
-      incomingScaleAnim.setValue(direction === "in" ? 0.78 : 1.24);
+      const nextSlotAnim = overlaySlots[nextSlot];
+      nextSlotAnim.opacity.setValue(0);
+      nextSlotAnim.enterScale.setValue(direction === "in" ? 0.94 : 1.06);
+      nextSlotAnim.exitScale.setValue(1);
 
       headerAnimRef.current?.stop();
       headerOpacityAnim.setValue(0.2);
-      headerScaleAnim.setValue(direction === "in" ? 0.9 : 1.1);
+      headerScaleAnim.setValue(direction === "in" ? 0.94 : 1.06);
       const headerAnim = Animated.parallel([
         Animated.timing(headerOpacityAnim, {
           toValue: 1,
-          duration: 190,
+          duration: 185,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(headerScaleAnim, {
           toValue: 1,
-          duration: 220,
+          duration: 195,
           easing: ZOOM_EASE_OUT,
           useNativeDriver: true,
         }),
@@ -1170,7 +1251,10 @@ function ToDiscuss() {
       setZoomLevel(nextLevel);
 
       const nextTransition: ZoomTransitionData = {
-        id: ++zoomTransitionIdRef.current,
+        id: nextId,
+        slot: nextSlot,
+        outgoingSlot,
+        outgoingScaleMode,
         outgoing: { level: prevLevel, page: prevPage },
         incoming: { level: nextLevel, page: targetPage },
         direction,
@@ -1183,14 +1267,14 @@ function ToDiscuss() {
     [
       baseYear,
       minYear,
-      cancelTransitionTimers,
+      cancelIncomingTimers,
+      cancelOutgoingAnim,
       halfAnim,
       quarterAnims,
       pinchScaleAnim,
-      outgoingOpacityAnim,
-      outgoingScaleAnim,
-      incomingOpacityAnim,
-      incomingScaleAnim,
+      baseGridOpacityAnim,
+      baseOutgoingScaleAnim,
+      overlaySlots,
       headerOpacityAnim,
       headerScaleAnim,
     ],
@@ -1237,13 +1321,20 @@ function ToDiscuss() {
         commitZoomHandoff(activeTr.id, activeTr.incoming.level);
       }
 
-      if (animateBack && (!wasTriggered || hadLiveScale)) {
-        Animated.spring(pinchScaleAnim, {
-          toValue: 1,
-          damping: 18,
-          stiffness: 240,
-          useNativeDriver: true,
-        }).start();
+      if (
+        (!wasTriggered || hadLiveScale) &&
+        (zoomTransitionRef.current === null || zoomAnimSettledRef.current)
+      ) {
+        if (animateBack) {
+          Animated.spring(pinchScaleAnim, {
+            toValue: 1,
+            damping: 18,
+            stiffness: 240,
+            useNativeDriver: true,
+          }).start();
+        } else {
+          pinchScaleAnim.setValue(1);
+        }
       }
     },
     [commitZoomHandoff, pinchScaleAnim],
@@ -1390,8 +1481,8 @@ function ToDiscuss() {
           }
         } else if ((ratio > 1 && canZoomIn) || (ratio < 1 && canZoomOut)) {
           nextScale = Math.max(
-            0.76,
-            Math.min(1.28, 1 + (ratio - 1) * 0.9),
+            0.82,
+            Math.min(1.2, 1 + (ratio - 1) * 0.78),
           );
         } else {
           // Subtle rubber-band resistance at boundary zoom levels
@@ -1787,9 +1878,14 @@ function ToDiscuss() {
     activeSource === null || activeSource === key ? "auto" : "none";
 
   const transitionActive = zoomTransition !== null;
+  const isHandoffReady =
+    zoomTransition !== null &&
+    handoffReadyId === zoomTransition.id &&
+    pagerZoomLevel === zoomTransition.incoming.level;
   const canReuseGridAsOutgoing =
-    zoomTransition !== null && zoomTransition.outgoing.level === pagerZoomLevel;
-  const hideGridPager = transitionActive && !canReuseGridAsOutgoing;
+    zoomTransition !== null && zoomTransition.outgoingSlot === null;
+  const hideGridPager =
+    transitionActive && !canReuseGridAsOutgoing && !isHandoffReady;
   const gridWindowRadius =
     transitionActive || zoomHydrationStage === 0
       ? 0
@@ -1806,11 +1902,13 @@ function ToDiscuss() {
           : undefined;
   const transitionLayers = zoomTransition
     ? [
-        ...(!canReuseGridAsOutgoing && !zoomAnimSettled
+        ...(zoomTransition.outgoingSlot !== null && !zoomAnimSettled
           ? [
               {
                 key: `zoom-${zoomTransition.outgoing.level}-${zoomTransition.outgoing.page}`,
                 role: "outgoing" as const,
+                slot: zoomTransition.outgoingSlot,
+                scaleMode: zoomTransition.outgoingScaleMode,
                 level: zoomTransition.outgoing.level,
                 page: zoomTransition.outgoing.page,
               },
@@ -1819,6 +1917,8 @@ function ToDiscuss() {
         {
           key: `zoom-${zoomTransition.incoming.level}-${zoomTransition.incoming.page}`,
           role: "incoming" as const,
+          slot: zoomTransition.slot,
+          scaleMode: "settled" as const,
           level: zoomTransition.incoming.level,
           page: zoomTransition.incoming.page,
         },
@@ -2388,14 +2488,8 @@ function ToDiscuss() {
             style={{
               width: GRID_WIDTH,
               height: gridBoxHeight,
-              opacity: canReuseGridAsOutgoing ? outgoingOpacityAnim : 1,
-              transform: [
-                {
-                  scale: canReuseGridAsOutgoing
-                    ? allGridScale
-                    : combinedGridScale,
-                },
-              ],
+              opacity: baseGridOpacityAnim,
+              transform: [{ scale: allGridScale }],
             }}
           >
             <SmoothHorizontalPager
@@ -2446,6 +2540,7 @@ function ToDiscuss() {
 
           {transitionLayers.map((layer) => {
             const isIncoming = layer.role === "incoming";
+            const slotAnim = overlaySlots[layer.slot];
             return (
               <Animated.View
                 key={layer.key}
@@ -2462,16 +2557,16 @@ function ToDiscuss() {
                       isIncoming && zoomAnimSettled
                         ? colors.background
                         : "transparent",
-                    opacity: isIncoming
-                      ? incomingOpacityAnim
-                      : outgoingOpacityAnim,
+                    opacity: slotAnim.opacity,
                     transform: [
                       {
                         scale: isIncoming
                           ? zoomAnimSettled
-                            ? pinchScaleAnim
-                            : incomingScaleAnim
-                          : outgoingScaleAnim,
+                            ? slotAnim.settledScale
+                            : slotAnim.enterScale
+                          : layer.scaleMode === "enter"
+                            ? slotAnim.enterScale
+                            : slotAnim.settledScale,
                       },
                     ],
                   },
