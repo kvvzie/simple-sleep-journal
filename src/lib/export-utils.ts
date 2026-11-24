@@ -487,19 +487,11 @@ export function buildCsvExportContent(params: {
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/**
- * Converts a YYYY-MM-DD calendar date to UTC midnight ISO string expected by
- * Compose Material 3 DateRangePickerState.
- */
 export function isoDateToUtcMidnightIso(dateStr: string): string | null {
   if (!ISO_DATE_RE.test(dateStr)) return null;
   return `${dateStr}T00:00:00.000Z`;
 }
 
-/**
- * Extracts YYYY-MM-DD in UTC from a Date returned by Material 3 DateRangePicker
- * (which represents selected calendar days at UTC midnight regardless of local TZ).
- */
 export function utcDateToIsoDate(date: Date | null | undefined): string {
   if (!date || Number.isNaN(date.getTime())) return "";
   const y = date.getUTCFullYear();

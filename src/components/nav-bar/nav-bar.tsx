@@ -17,7 +17,7 @@ import {
   OUTER_BUTTON_WIDTH,
   styles,
 } from "./nav-bar.styles";
-import ReadingModeMobileIcon from "./reading-mode-mobile-icon";
+import { ReadingModeMobileIcon } from "../icons";
 
 function hexToRgba(hex: string, alpha: number): string {
   const clean = hex.replace("#", "").trim();

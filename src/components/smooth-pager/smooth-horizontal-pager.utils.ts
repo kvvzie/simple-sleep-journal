@@ -27,10 +27,6 @@ export function getVisiblePagerIndices(
   return Array.from(visible).sort((a, b) => a - b);
 }
 
-/**
- * Converts a positive native horizontal track offset (`scrollX >= 0`) into the
- * standard `{ position, offset }` pager scroll contract (`0 <= offset < 1`).
- */
 export function scrollXToPageScrollEvent(
   scrollX: number,
   pageWidth: number,
@@ -46,10 +42,6 @@ export function scrollXToPageScrollEvent(
   return { position, offset };
 }
 
-/**
- * Only shifts the windowed page mount center when scrolling moves at least
- * `radius` pages away so single-page swipes mount/unmount zero views mid-drag.
- */
 export function shouldShiftPagerWindow(
   livePage: number,
   windowCenter: number,
@@ -58,17 +50,10 @@ export function shouldShiftPagerWindow(
   return Math.abs(livePage - windowCenter) >= Math.max(1, radius);
 }
 
-/**
- * Computes the hysteresis threshold before shifting `windowCenter` so adjacent
- * swipes never unmount/remount views when at least 1 extra buffer page exists.
- */
 export function getWindowShiftThreshold(radius: number): number {
   return radius >= 3 ? 2 : Math.max(1, radius);
 }
 
-/**
- * Detects whether a track offset rests cleanly on an integer page boundary.
- */
 export function isScrollOffsetSettledAtPage(
   scrollX: number,
   pageWidth: number,
@@ -79,9 +64,6 @@ export function isScrollOffsetSettledAtPage(
   return Math.abs(scrollX - nearestX) <= epsilonPx;
 }
 
-/**
- * Applies soft resistance outside the `[minTx, maxTx]` track bounds.
- */
 export function applyHorizontalRubberBand(
   rawTx: number,
   minTx: number,
@@ -102,10 +84,6 @@ const SWIPE_SNAP_DISTANCE_FRACTION = 0.35;
 const SWIPE_FLICK_VELOCITY_DP_S = 260;
 const SWIPE_VELOCITY_PROJECTION_SEC = 0.18;
 
-/**
- * Resolves the target integer page when a pan gesture ends, blending release
- * displacement and horizontal flick velocity (`velocityX < 0` advances right).
- */
 export function resolveSwipeTargetPage({
   startPage,
   startScrollX,
@@ -128,7 +106,6 @@ export function resolveSwipeTargetPage({
   const projectedDeltaX =
     deltaScrollX - velocityX * SWIPE_VELOCITY_PROJECTION_SEC;
 
-  // Long drags past half a page can settle near the stretched position; normal swipes move at most 1 page.
   if (Math.abs(deltaScrollX) > pageWidth * 0.5) {
     const maxStep = Math.ceil(Math.abs(deltaScrollX) / pageWidth);
     const projectedPage = Math.round(

@@ -45,6 +45,7 @@ describe("Theme & Appearance Utilities", () => {
       font: { name: "PixelFont" },
       backgrounds: {
         calendar: "data:image/png;base64,ABCDEF1234==",
+        toDiscuss: "data:image/png;base64,WEEKLY5678==",
         settings: "data:image/png;base64,XYZ98765==",
       },
       features: {
@@ -61,6 +62,7 @@ describe("Theme & Appearance Utilities", () => {
     assert.equal(serialized.name, "Cyberpunk Mocha");
     assert.equal(serialized.palette.dark?.background, "#0D0E15");
     assert.equal(serialized.backgrounds.calendarBase64, "data:image/png;base64,ABCDEF1234==");
+    assert.equal(serialized.backgrounds.toDiscussBase64, "data:image/png;base64,WEEKLY5678==");
     assert.equal(serialized.backgrounds.settingsBase64, "data:image/png;base64,XYZ98765==");
     assert.equal(serialized.features.bodyCareEnabled, false);
     assert.equal(serialized.features.moodStarsEnabled, true);
@@ -92,8 +94,28 @@ describe("Theme & Appearance Utilities", () => {
     assert.equal(res.theme.palette.light?.background, "#FFF8F0");
     assert.equal(res.theme.font?.name, "CatFont");
     assert.equal(res.theme.backgrounds.calendar, "data:image/png;base64,CAT123");
+    assert.equal(res.theme.backgrounds.toDiscuss, null);
     assert.equal(res.theme.backgrounds.settings, null);
     assert.equal(res.theme.features?.bodyCareEnabled, false);
+  });
+
+  it("parses weekly recaps background aliases and detects modifications", () => {
+    const parsed = parseAndValidateMoodTheme({
+      format: "simple-sleep-journal-theme",
+      version: 1,
+      name: "Weekly Wallpaper Theme",
+      palette: {},
+      backgrounds: {
+        weeklyRecaps: "data:image/jpeg;base64,RECAP_IMG",
+      },
+    });
+    assert.equal(parsed.valid, true);
+    if (!parsed.valid) return;
+    assert.equal(parsed.theme.backgrounds.toDiscuss, "data:image/jpeg;base64,RECAP_IMG");
+    assert.equal(
+      isThemeModifiedFromDefaults("default", parsed.theme, DEFAULT_THEME),
+      true,
+    );
   });
 
   it("parseAndValidateMoodTheme rejects non-object or corrupt payloads", () => {

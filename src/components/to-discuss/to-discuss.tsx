@@ -550,7 +550,8 @@ const WeekGridPage = memo(function WeekGridPage({
 });
 
 function ToDiscuss() {
-  const { colors, resolveFont } = useAppearance();
+  const { colors, backgrounds, resolveFont } = useAppearance();
+  const hasWallpaper = Boolean(backgrounds.toDiscuss);
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
@@ -769,8 +770,6 @@ function ToDiscuss() {
     [],
   );
 
-  // Progressive post-zoom neighbor hydration: mount ±1 immediately after handoff so swiping works
-  // right away without stalling Fabric, then warm ±2 / ±1y neighbors in background once idle.
   useEffect(() => {
     if (hydrationTimerRef.current !== null) {
       clearTimeout(hydrationTimerRef.current);
@@ -802,8 +801,6 @@ function ToDiscuss() {
     const { id, slot } = zoomTransition;
     const incomingSlot = overlaySlots[slot];
 
-    // Outgoing starts synchronously inside `changeZoomLevel` at t=0; join incoming right after 1 frame
-    // so the new level glides gently into place without any collapsed inward spring bounce.
     const inAnim = Animated.sequence([
       Animated.delay(15),
       Animated.parallel([
@@ -829,8 +826,6 @@ function ToDiscuss() {
       inAnim.start(({ finished }) => {
         if (!finished || zoomTransitionRef.current?.id !== id) return;
         activeTransitionAnimRef.current = null;
-        // Outgoing reached opacity 0 ~130ms ago, so resetting pinch/base exit scales here
-        // is completely invisible and aligns `settledScale` (1.0) with `enterScale` (1.0).
         pinchScaleAnim.setValue(1);
         baseOutgoingScaleAnim.setValue(1);
         incomingSlot.exitScale.setValue(1);
@@ -839,8 +834,6 @@ function ToDiscuss() {
         if (prevTouchCountRef.current < 2) {
           commitZoomHandoff(id, zoomTransition.incoming.level);
         } else {
-          // Keep the underlying pager mounted while 2 fingers remain on screen so
-          // JSTouchDispatcher keeps routing moves for continuous Stage-2 pinching.
           pinchTriggeredRef.current = false;
           pinchActiveRef.current = true;
         }
@@ -859,19 +852,20 @@ function ToDiscuss() {
     baseOutgoingScaleAnim,
   ]);
 
-  // Reveal the new pager cleanly after React + Fabric commit `pagerZoomLevel === incoming.level`
-  // behind the opaque incoming cover, minimizing post-zoom swipe wait.
   useEffect(() => {
     if (!zoomTransition || handoffReadyId !== zoomTransition.id) return;
     if (pagerZoomLevel !== zoomTransition.incoming.level) return;
     const { id } = zoomTransition;
-    // Pre-reveal the freshly mounted target pager at opacity 1 behind the opaque incoming cover
-    // so Fabric rasterizes it before the cover unmounts on the next animation frame.
     baseOutgoingScaleAnim.setValue(1);
-    baseGridOpacityAnim.setValue(1);
+    if (!hasWallpaper) {
+      baseGridOpacityAnim.setValue(1);
+    }
     handoffRafRef.current = requestAnimationFrame(() => {
       handoffRafRef.current = null;
       if (zoomTransitionRef.current?.id !== id) return;
+      if (hasWallpaper) {
+        baseGridOpacityAnim.setValue(1);
+      }
       zoomTransitionRef.current = null;
       zoomAnimSettledRef.current = false;
       handoffReadyIdRef.current = null;
@@ -899,6 +893,7 @@ function ToDiscuss() {
     handoffReadyId,
     pagerZoomLevel,
     zoomTransition,
+    hasWallpaper,
     baseOutgoingScaleAnim,
     baseGridOpacityAnim,
   ]);
@@ -1101,8 +1096,6 @@ function ToDiscuss() {
       pinchCooldownUntilRef.current = 0;
       livePinchScaleRef.current = 1;
       if (!fromPinch || prevTouchCountRef.current < 2) {
-        // Release pinch scroll lock immediately on non-pinch / lifted-finger zooms so
-        // the upcoming pager mounts with scrollEnabled=true.
         pinchActiveRef.current = false;
         setIsPinching(false);
       }
@@ -1117,7 +1110,6 @@ function ToDiscuss() {
       lastYearPage.current = targetYearPage;
       yearPagerRef.current?.setPageWithoutAnimation(targetYearPage);
 
-      // Snap header indicators directly so 0 concurrent spring animations fight Frame 0.
       if (nextLevel === "half") {
         const nextHalf = pageToYearHalf(targetPage, minYear, 1, 0).half;
         halfAnim.stopAnimation();
@@ -1347,7 +1339,6 @@ function ToDiscuss() {
       const prevCount = prevTouchCountRef.current;
       prevTouchCountRef.current = touches.length;
 
-      // Clear any orphaned pinch lock left behind if an unmounted child dropped touchEnd.
       if (touches.length < 2) {
         if (
           pinchActiveRef.current ||
@@ -1485,7 +1476,6 @@ function ToDiscuss() {
             Math.min(1.2, 1 + (ratio - 1) * 0.78),
           );
         } else {
-          // Subtle rubber-band resistance at boundary zoom levels
           nextScale = Math.max(0.95, Math.min(1.05, 1 + (ratio - 1) * 0.18));
         }
 
@@ -1705,7 +1695,6 @@ function ToDiscuss() {
         : getPageCountForZoom(zoomLevelRef.current) - 1;
     if (dragStartPosRef.current === null) dragStartPosRef.current = pos;
 
-    // Track genuine multi-page fast flings once scroll crosses > 1 full page past anchor.
     if (manualScrollSource.current === key && Math.abs(pos - anchor) >= 1.05) {
       const flewPage = Math.max(0, Math.min(maxPage, Math.round(pos)));
       dragAnchorRef.current = flewPage;
@@ -1993,7 +1982,7 @@ function ToDiscuss() {
       style={[
         styles.container,
         {
-          backgroundColor: colors.background,
+          backgroundColor: hasWallpaper ? "transparent" : colors.background,
           paddingTop: containerTopPadding,
           paddingBottom: containerBottomPadding,
         },
@@ -2554,7 +2543,7 @@ function ToDiscuss() {
                     width: GRID_WIDTH,
                     height: gridBoxHeight,
                     backgroundColor:
-                      isIncoming && zoomAnimSettled
+                      isIncoming && zoomAnimSettled && !hasWallpaper
                         ? colors.background
                         : "transparent",
                     opacity: slotAnim.opacity,

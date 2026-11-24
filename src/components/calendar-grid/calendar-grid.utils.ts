@@ -130,11 +130,6 @@ export function getSwipeTargetPage(
   return null;
 }
 
-/**
- * Computes the preview target page during an active drag with center-return hysteresis,
- * so reversing a drag through the center restores `anchorPage` (e.g. october -> november -> december)
- * instead of jumping directly across it.
- */
 export const SWIPE_TRIGGER_THRESHOLD = 0.18;
 export const SWIPE_RETURN_THRESHOLD = 0.12;
 

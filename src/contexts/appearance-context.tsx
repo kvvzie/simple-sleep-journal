@@ -45,7 +45,10 @@ type AppearanceContextType = {
     key: keyof ThemePaletteColors,
     color: string,
   ) => void;
-  updateBackground: (screen: "calendar" | "settings", uriOrBase64: string | null) => void;
+  updateBackground: (
+    screen: "calendar" | "toDiscuss" | "settings",
+    uriOrBase64: string | null,
+  ) => void;
   setCustomFont: (font: CustomFontConfig | null) => Promise<boolean>;
   resetTheme: () => Promise<void>;
   exportTheme: (name?: string) => Promise<{ success: boolean; canceled?: boolean; uri?: string; error?: string }>;
@@ -196,7 +199,10 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
   );
 
   const updateBackground = useCallback(
-    (screen: "calendar" | "settings", uriOrBase64: string | null) => {
+    (
+      screen: "calendar" | "toDiscuss" | "settings",
+      uriOrBase64: string | null,
+    ) => {
       setTheme((prev) => ({
         ...prev,
         backgrounds: {
@@ -256,6 +262,15 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
         } catch {}
       }
 
+      let toDiscussBg = theme.backgrounds.toDiscuss || null;
+      if (toDiscussBg && !toDiscussBg.startsWith("data:")) {
+        try {
+          const { readAsStringAsync, EncodingType } = require("expo-file-system/legacy");
+          const b64 = await readAsStringAsync(toDiscussBg, { encoding: EncodingType.Base64 });
+          toDiscussBg = `data:image/jpeg;base64,${b64}`;
+        } catch {}
+      }
+
       let sett = theme.backgrounds.settings;
       if (sett && !sett.startsWith("data:")) {
         try {
@@ -270,6 +285,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
         name: customName || theme.name || "Custom Look",
         backgrounds: {
           calendar: cal,
+          toDiscuss: toDiscussBg,
           settings: sett,
         },
         features: {

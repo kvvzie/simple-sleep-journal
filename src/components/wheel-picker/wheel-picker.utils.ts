@@ -13,11 +13,6 @@ export function computeRubberBandWheelPage(
   return rawPage;
 }
 
-/**
- * Projects a release target page index from the current scroll offset and
- * vertical velocity (`vy` in px/ms from React Native PanResponder), capped cleanly
- * so fast flicks scroll smoothly without overshooting wildly on short pickers.
- */
 export function projectWheelReleasePage(options: {
   startPage: number;
   dy: number;
@@ -39,7 +34,6 @@ export function projectWheelReleasePage(options: {
   const draggedPage = startPage - dy / pageHeight;
   const clampedStart = clampWheelPage(startPage, totalPages);
 
-  // Add light momentum in the drag direction only for deliberate flicks.
   const absVy = Math.abs(vy);
   const velocityPages = absVy >= 0.22 ? (-vy * 110) / pageHeight : 0;
   const projected = draggedPage + velocityPages;

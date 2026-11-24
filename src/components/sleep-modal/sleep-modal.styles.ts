@@ -15,6 +15,7 @@ export const styles = StyleSheet.create({
     height: 150,
   },
   hoursColumn: { alignItems: "center", marginBottom: 20, gap: 0 },
+  hoursPlaceholder: { height: 112 },
   dragZone: { alignItems: "center", paddingTop: 16, paddingBottom: 12 },
   dragHandle: {
     width: 70,
@@ -36,19 +37,62 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 8,
   },
+  commentSection: {
+    width: "100%",
+  },
+  commentHeaderRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 34,
+    marginBottom: 2,
+  },
+  commentHeaderSideLeft: {
+    alignItems: "flex-start",
+  },
+  commentHeaderSideRight: {
+    alignItems: "flex-end",
+  },
+  commentHeaderAction: {
+    minWidth: 40,
+    minHeight: 34,
+    justifyContent: "center",
+  },
+  commentHeaderLabel: {
+    flex: 1,
+    paddingBottom: 4,
+    marginBottom: 0,
+    textAlign: "center",
+  },
   commentBox: {
     width: "100%",
     minHeight: 120,
     borderRadius: 12,
-    marginTop: 8,
+    marginTop: 2,
     position: "relative",
   },
   commentInput: {
+    flex: 1,
     padding: 14,
     fontSize: 18,
-    minHeight: 116,
-    maxHeight: 240,
+    lineHeight: 24,
     textAlignVertical: "top",
+  },
+  commentReadScroll: {
+    width: "100%",
+    flex: 1,
+  },
+  commentReadScrollContent: {
+    flexGrow: 1,
+  },
+  commentReadPressable: {
+    flex: 1,
+    padding: 14,
+  },
+  commentReadText: {
+    fontSize: 18,
+    lineHeight: 24,
   },
   deleteButton: {
     marginTop: 20,

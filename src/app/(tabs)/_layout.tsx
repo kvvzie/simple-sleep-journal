@@ -129,6 +129,14 @@ export default function TabsLayout() {
             { transform: [{ translateX: toDiscussTranslateX }] },
           ]}
         >
+          {backgrounds.toDiscuss && (
+            <Image
+              source={{ uri: backgrounds.toDiscuss }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
+          )}
           <ToDiscuss />
         </Animated.View>
       )}

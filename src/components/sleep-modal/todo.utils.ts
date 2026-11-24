@@ -15,7 +15,6 @@ export const TODO_CARRYOVER_DAYS = 3;
 export const MAX_TODO_DISPLAY_HOURS = 96;
 const MS_PER_HOUR = 3_600_000;
 
-/** Returns YYYY-MM-DD shifted by `days` using UTC calendar math (DST-safe). */
 export function addDaysToIsoDate(isoDate: string, days: number): string {
   const parts = isoDate.split("-");
   if (parts.length !== 3) return isoDate;
@@ -52,12 +51,6 @@ export function generateTodoId(): string {
   return `todo_${timePart}_${randPart}`;
 }
 
-/**
- * Checks whether a task should display on `viewDate`:
- * - Visible from `created_date` through `expires_date` (`created_date + 3 days`).
- * - Once completed on `completed_date`, stays visible on `created_date .. completed_date`
- *   and disappears on subsequent days (`viewDate > completed_date`).
- */
 export function isTodoVisibleOnDate(todo: TodoTask, viewDate: string): boolean {
   if (viewDate < todo.created_date || viewDate > todo.expires_date) {
     return false;
@@ -83,7 +76,6 @@ export function sortTodosChronologically(todos: TodoTask[]): TodoTask[] {
   });
 }
 
-/** Formats elapsed hours since creation as `(<1 hours ago)`, `(N hours ago)`, or `(>96 hours ago)`. */
 export function formatTodoElapsedHours(
   createdAtIso: string,
   nowMs = Date.now(),

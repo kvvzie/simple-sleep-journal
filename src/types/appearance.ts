@@ -34,6 +34,7 @@ export type FeatureFlags = {
 
 export type AppBackgrounds = {
   calendar: string | null;
+  toDiscuss?: string | null;
   settings: string | null;
 };
 
@@ -60,6 +61,7 @@ export type MoodThemeFile = {
   font?: CustomFontConfig | null;
   backgrounds: {
     calendarBase64?: string | null;
+    toDiscussBase64?: string | null;
     settingsBase64?: string | null;
   };
   features: Partial<FeatureFlags>;

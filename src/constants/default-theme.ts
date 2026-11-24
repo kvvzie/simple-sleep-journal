@@ -50,6 +50,7 @@ export const DEFAULT_THEME: AppTheme = {
   font: null,
   backgrounds: {
     calendar: null,
+    toDiscuss: null,
     settings: null,
   },
   features: {},

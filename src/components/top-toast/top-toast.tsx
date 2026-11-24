@@ -115,8 +115,6 @@ export function ToastHost({ hostId }: Props) {
     outputRange: [0.94, 1],
   });
 
-  // Keep root host always mounted on Fabric so modal-to-root handoffs never attach
-  // a native-driver Animated.Value to a freshly mounted view mid-toast.
   if (!isCurrentHost && hostId !== "root") {
     return null;
   }

@@ -40,6 +40,7 @@ export function serializeMoodTheme(
     font: theme.font || null,
     backgrounds: {
       calendarBase64: theme.backgrounds?.calendar || null,
+      toDiscussBase64: theme.backgrounds?.toDiscuss || null,
       settingsBase64: theme.backgrounds?.settings || null,
     },
     features: theme.features || {},
@@ -97,6 +98,7 @@ export function parseAndValidateMoodTheme(
 
   const backgrounds: AppTheme["backgrounds"] = {
     calendar: null,
+    toDiscuss: null,
     settings: null,
   };
 
@@ -106,6 +108,16 @@ export function parseAndValidateMoodTheme(
       backgrounds.calendar = rawBg.calendarBase64;
     } else if (typeof rawBg.calendar === "string") {
       backgrounds.calendar = rawBg.calendar;
+    }
+
+    if (typeof rawBg.toDiscussBase64 === "string") {
+      backgrounds.toDiscuss = rawBg.toDiscussBase64;
+    } else if (typeof rawBg.toDiscuss === "string") {
+      backgrounds.toDiscuss = rawBg.toDiscuss;
+    } else if (typeof rawBg.weeklyRecapsBase64 === "string") {
+      backgrounds.toDiscuss = rawBg.weeklyRecapsBase64;
+    } else if (typeof rawBg.weeklyRecaps === "string") {
+      backgrounds.toDiscuss = rawBg.weeklyRecaps;
     }
 
     if (typeof rawBg.settingsBase64 === "string") {
@@ -212,6 +224,10 @@ export function isThemeModifiedFromDefaults(
   const currentCalBg = theme.backgrounds?.calendar || null;
   const defaultCalBg = targetDefault.backgrounds?.calendar || null;
   if (currentCalBg !== defaultCalBg) return true;
+
+  const currentToDiscussBg = theme.backgrounds?.toDiscuss || null;
+  const defaultToDiscussBg = targetDefault.backgrounds?.toDiscuss || null;
+  if (currentToDiscussBg !== defaultToDiscussBg) return true;
 
   const currentSetBg = theme.backgrounds?.settings || null;
   const defaultSetBg = targetDefault.backgrounds?.settings || null;

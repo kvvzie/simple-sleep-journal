@@ -10,10 +10,6 @@ type Props = {
   snapKey?: string | number;
 };
 
-/**
- * Native-driver animated circular radio indicator matching Ionicons radio-button
- * proportions with a light ring press-release and spring dot pop.
- */
 export default function AnimatedRadioDot({
   checked,
   size = 22,

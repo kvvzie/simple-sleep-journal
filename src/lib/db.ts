@@ -7,7 +7,12 @@ import {
   type DiscussionTopic,
   type WeekTopicSummary,
 } from "../components/to-discuss/to-discuss.utils";
-import { CLEAR_ALL_DATA_SQL } from "./db-import.utils";
+import {
+  CLEAR_ALL_DATA_SQL,
+  sanitizeImportedBodyCareLogs,
+  sanitizeImportedSleepLogEdits,
+  sanitizeImportedSleepLogs,
+} from "./db-import.utils";
 import { computeMinMaxIsoDates } from "./export-utils";
 import {
   addDaysToIsoDate,
@@ -578,31 +583,31 @@ export async function getAllEdits() {
   );
 }
 
-export async function importLogs(
-  logs: { date: string; hours: number; mood: number; comment: string }[],
-) {
+export async function importLogs(rawLogs: unknown) {
   const now = new Date().toISOString();
+  const sanitizedLogs = sanitizeImportedSleepLogs(rawLogs, now);
   await withDb(async (db) => {
     await db.withTransactionAsync(async () => {
       for (const sql of CLEAR_ALL_DATA_SQL) {
         await db.runAsync(sql);
       }
-      for (const log of logs) {
+      for (const log of sanitizedLogs) {
         await db.runAsync(
           `INSERT INTO sleep_logs (date, hours, mood, comment, logged, logged_at, updated_at)
            VALUES (?, ?, ?, ?, 1, ?, ?)
-           ON CONFLICT(date) DO UPDATE SET hours=?, mood=?, comment=?, updated_at=?`,
+           ON CONFLICT(date) DO UPDATE SET hours=?, mood=?, comment=?, logged_at=?, updated_at=?`,
           [
             log.date,
             log.hours,
             log.mood,
             log.comment,
-            now,
-            now,
+            log.logged_at,
+            log.updated_at,
             log.hours,
             log.mood,
             log.comment,
-            now,
+            log.logged_at,
+            log.updated_at,
           ],
         );
       }
@@ -820,36 +825,24 @@ export async function deleteWeekDiscussionTopics(
 }
 
 export async function importBackup(
-  logs: {
-    date: string;
-    hours: number;
-    mood: number;
-    comment: string;
-    logged_at?: string | null;
-    updated_at?: string | null;
-  }[],
-  edits: Omit<SleepLogEdit, "id">[],
-  bodyCareLogs: {
-    date: string;
-    product_id: string;
-    amounts?: BodyCareAmounts;
-    updated_at?: string | null;
-  }[] = [],
+  rawLogs: unknown,
+  rawEdits: unknown = [],
+  rawBodyCareLogs: unknown = [],
   rawTodos: unknown = [],
   rawDiscussionTopics: unknown = [],
 ) {
   const now = new Date().toISOString();
+  const sanitizedLogs = sanitizeImportedSleepLogs(rawLogs, now);
+  const sanitizedEdits = sanitizeImportedSleepLogEdits(rawEdits, now);
+  const sanitizedBodyCareLogs = sanitizeImportedBodyCareLogs(
+    rawBodyCareLogs,
+    now,
+  );
   const sanitizedTodos = sanitizeImportedTodos(rawTodos, now);
   const sanitizedTopics = sanitizeImportedDiscussionTopics(
     rawDiscussionTopics,
     now,
   );
-
-  const editsByDate = new Map<string, typeof edits>();
-  for (const e of edits) {
-    if (!editsByDate.has(e.log_date)) editsByDate.set(e.log_date, []);
-    editsByDate.get(e.log_date)!.push(e);
-  }
 
   await withDb(async (db) => {
     await db.withTransactionAsync(async () => {
@@ -857,10 +850,7 @@ export async function importBackup(
         await db.runAsync(sql);
       }
 
-      for (const log of logs) {
-        const loggedAt = log.logged_at ?? now;
-        const updatedAt = log.updated_at ?? now;
-
+      for (const log of sanitizedLogs) {
         await db.runAsync(
           `INSERT INTO sleep_logs (date, hours, mood, comment, logged, logged_at, updated_at)
            VALUES (?, ?, ?, ?, 1, ?, ?)
@@ -871,21 +861,20 @@ export async function importBackup(
             log.hours,
             log.mood,
             log.comment,
-            loggedAt,
-            updatedAt,
+            log.logged_at,
+            log.updated_at,
             log.hours,
             log.mood,
             log.comment,
-            loggedAt,
-            updatedAt,
+            log.logged_at,
+            log.updated_at,
           ],
         );
+      }
 
-        const dateEdits = editsByDate.get(log.date) ?? [];
-
-        for (const edit of dateEdits) {
-          await db.runAsync(
-            `INSERT INTO sleep_log_edits
+      for (const edit of sanitizedEdits) {
+        await db.runAsync(
+          `INSERT INTO sleep_log_edits
         (log_date, edit_index, edited_at,
          prev_hours, new_hours, prev_mood, new_mood, prev_comment, new_comment,
          changed_hours, changed_mood, changed_comment)
@@ -901,26 +890,24 @@ export async function importBackup(
          changed_hours = excluded.changed_hours,
          changed_mood = excluded.changed_mood,
          changed_comment = excluded.changed_comment`,
-            [
-              edit.log_date,
-              edit.edit_index,
-              edit.edited_at,
-              edit.prev_hours,
-              edit.new_hours,
-              edit.prev_mood,
-              edit.new_mood,
-              edit.prev_comment,
-              edit.new_comment,
-              edit.changed_hours,
-              edit.changed_mood,
-              edit.changed_comment,
-            ],
-          );
-        }
+          [
+            edit.log_date,
+            edit.edit_index,
+            edit.edited_at,
+            edit.prev_hours,
+            edit.new_hours,
+            edit.prev_mood,
+            edit.new_mood,
+            edit.prev_comment,
+            edit.new_comment,
+            edit.changed_hours,
+            edit.changed_mood,
+            edit.changed_comment,
+          ],
+        );
       }
 
-      for (const bodyCare of bodyCareLogs) {
-        if (!bodyCare?.date || !bodyCare?.product_id) continue;
+      for (const bodyCare of sanitizedBodyCareLogs) {
         await db.runAsync(
           `INSERT INTO body_care_logs
       (date, product_id, amounts_json, updated_at)
@@ -932,8 +919,8 @@ export async function importBackup(
           [
             bodyCare.date,
             bodyCare.product_id,
-            JSON.stringify(bodyCare.amounts ?? {}),
-            bodyCare.updated_at ?? now,
+            JSON.stringify(bodyCare.amounts),
+            bodyCare.updated_at,
           ],
         );
       }

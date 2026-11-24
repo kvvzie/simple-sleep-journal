@@ -11,9 +11,15 @@ import {
   toggleDiscussionTopicCompleted,
   updateDiscussionTopic,
 } from "@/lib/db";
+import {
+  computeDynamicBoxHeight,
+  getExpandedBoxBounds,
+  isDoubleTap,
+  isTapMovementWithinThreshold,
+} from "@/lib/editor-utils";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   BackHandler,
@@ -57,6 +63,98 @@ type Props = {
 
 const SCREEN_HEIGHT = Dimensions.get("window").height;
 const CLOSE_THRESHOLD = 90;
+const BASE_DESC_MIN_HEIGHT = 57;
+const BASE_DESC_MAX_HEIGHT = 129;
+const DESC_READ_VERTICAL_PADDING = 16;
+const EXPANDED_DESC_BOUNDS = getExpandedBoxBounds(
+  BASE_DESC_MIN_HEIGHT,
+  BASE_DESC_MAX_HEIGHT,
+  true,
+  3.2,
+);
+
+function ExpandableDescriptionBox({
+  expanded,
+  contentHeight,
+  active,
+  idleColor,
+  highlightColor,
+  innerBorderColor,
+  children,
+}: {
+  expanded: boolean;
+  contentHeight: number;
+  active: boolean;
+  idleColor: string;
+  highlightColor: string;
+  innerBorderColor: string;
+  children: ReactNode;
+}) {
+  const initialHeight = computeDynamicBoxHeight({
+    contentHeight,
+    baseMinHeight: BASE_DESC_MIN_HEIGHT,
+    baseMaxHeight: BASE_DESC_MAX_HEIGHT,
+    expandedMaxHeight: EXPANDED_DESC_BOUNDS.maxHeight,
+    expanded,
+  });
+  const boxHeightAnim = useRef(new Animated.Value(initialHeight)).current;
+  const hasMeasuredRef = useRef(contentHeight > 0);
+  const prevExpandedRef = useRef(expanded);
+  const lastTargetHeightRef = useRef(initialHeight);
+
+  useEffect(() => {
+    const targetHeight = computeDynamicBoxHeight({
+      contentHeight,
+      baseMinHeight: BASE_DESC_MIN_HEIGHT,
+      baseMaxHeight: BASE_DESC_MAX_HEIGHT,
+      expandedMaxHeight: EXPANDED_DESC_BOUNDS.maxHeight,
+      expanded,
+    });
+    const expandedChanged = prevExpandedRef.current !== expanded;
+    prevExpandedRef.current = expanded;
+
+    if (!hasMeasuredRef.current && contentHeight > 0) {
+      hasMeasuredRef.current = true;
+      lastTargetHeightRef.current = targetHeight;
+      boxHeightAnim.stopAnimation();
+      boxHeightAnim.setValue(targetHeight);
+      return;
+    }
+
+    if (Math.abs(targetHeight - lastTargetHeightRef.current) < 1) {
+      return;
+    }
+    lastTargetHeightRef.current = targetHeight;
+    boxHeightAnim.stopAnimation();
+    Animated.timing(boxHeightAnim, {
+      toValue: targetHeight,
+      duration: expandedChanged ? 200 : 110,
+      easing: expandedChanged
+        ? Easing.out(Easing.cubic)
+        : Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
+  }, [expanded, contentHeight, boxHeightAnim]);
+
+  return (
+    <AnimatedDottedBorder
+      active={active}
+      idleColor={idleColor}
+      highlightColor={highlightColor}
+      innerBorderColor={innerBorderColor}
+      style={styles.descriptionBoxWrap}
+    >
+      <Animated.View
+        style={{
+          width: "100%",
+          height: boxHeightAnim,
+        }}
+      >
+        {children}
+      </Animated.View>
+    </AnimatedDottedBorder>
+  );
+}
 
 function DynamicTitleInput({
   value,
@@ -150,6 +248,9 @@ export default function WeekDiscussModal({
   const modalSnapKey = weekKey ?? "closed";
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFocusTarget, setEditFocusTarget] = useState<
+    "title" | "description"
+  >("title");
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const editingIdRef = useRef<string | null>(null);
@@ -166,6 +267,22 @@ export default function WeekDiscussModal({
   const newDescriptionRef = useRef("");
   const addHandledRef = useRef(false);
   const newDescInputRef = useRef<TextInputInstance>(null);
+
+  const [expandedTopicIds, setExpandedTopicIds] = useState<
+    Record<string, boolean>
+  >({});
+  const [topicContentHeights, setTopicContentHeights] = useState<
+    Record<string, number>
+  >({});
+  const [newTopicExpanded, setNewTopicExpanded] = useState(false);
+  const [newTopicContentHeight, setNewTopicContentHeight] = useState(0);
+  const lastDescTapRef = useRef<{ topicId: string; atMs: number } | null>(null);
+  const touchedInsideActiveCardRef = useRef(false);
+  const outsideTapStartRef = useRef<{
+    x: number;
+    y: number;
+    activeKey: string;
+  } | null>(null);
 
   const [topicPendingDelete, setTopicPendingDelete] =
     useState<DiscussionTopic | null>(null);
@@ -198,6 +315,7 @@ export default function WeekDiscussModal({
     editDescriptionRef.current = "";
     editHandledRef.current = false;
     setEditingId(null);
+    setEditFocusTarget("title");
     setEditTitle("");
     setEditDescription("");
 
@@ -208,6 +326,14 @@ export default function WeekDiscussModal({
     setIsAdding(false);
     setNewTitle("");
     setNewDescription("");
+
+    setExpandedTopicIds({});
+    setTopicContentHeights({});
+    setNewTopicExpanded(false);
+    setNewTopicContentHeight(0);
+    lastDescTapRef.current = null;
+    touchedInsideActiveCardRef.current = false;
+    outsideTapStartRef.current = null;
   };
 
   const refreshWeekData = async (targetWeekKey = weekKey) => {
@@ -286,7 +412,7 @@ export default function WeekDiscussModal({
     return false;
   };
 
-  const commitEdit = async () => {
+  const commitEdit = async (dismissKeyboard = true) => {
     const activeId = editingIdRef.current;
     if (editHandledRef.current || !activeId) return;
     editHandledRef.current = true;
@@ -298,9 +424,18 @@ export default function WeekDiscussModal({
     editTitleRef.current = "";
     editDescriptionRef.current = "";
     setEditingId(null);
+    setEditFocusTarget("title");
     setEditTitle("");
     setEditDescription("");
-    Keyboard.dismiss();
+    if (dismissKeyboard) {
+      Keyboard.dismiss();
+    } else {
+      requestAnimationFrame(() => {
+        if (editingIdRef.current === null && !isAddingRef.current) {
+          Keyboard.dismiss();
+        }
+      });
+    }
 
     if (
       target &&
@@ -314,7 +449,7 @@ export default function WeekDiscussModal({
     }
   };
 
-  const commitAdd = async () => {
+  const commitAdd = async (dismissKeyboard = true) => {
     if (addHandledRef.current || !isAddingRef.current) return;
     addHandledRef.current = true;
     const trimmedTitle = newTitleRef.current.trim();
@@ -326,7 +461,16 @@ export default function WeekDiscussModal({
     setIsAdding(false);
     setNewTitle("");
     setNewDescription("");
-    Keyboard.dismiss();
+    setNewTopicExpanded(false);
+    if (dismissKeyboard) {
+      Keyboard.dismiss();
+    } else {
+      requestAnimationFrame(() => {
+        if (editingIdRef.current === null && !isAddingRef.current) {
+          Keyboard.dismiss();
+        }
+      });
+    }
 
     if (weekKey && trimmedTitle.length > 0) {
       hasPendingSaveToastRef.current = true;
@@ -432,24 +576,66 @@ export default function WeekDiscussModal({
     }),
   ).current;
 
-  const startEditing = (topic: DiscussionTopic) => {
+  const startEditing = (
+    topic: DiscussionTopic,
+    focusTarget: "title" | "description" = "title",
+  ) => {
+    outsideTapStartRef.current = null;
     if (editingIdRef.current !== null && editingIdRef.current !== topic.id) {
-      void commitEdit();
+      void commitEdit(false);
     } else if (isAddingRef.current) {
-      void commitAdd();
+      void commitAdd(false);
     }
     editHandledRef.current = false;
     editingIdRef.current = topic.id;
     editTitleRef.current = topic.title;
     editDescriptionRef.current = topic.description;
+    setEditFocusTarget(focusTarget);
     setEditingId(topic.id);
     setEditTitle(topic.title);
     setEditDescription(topic.description);
   };
 
+  const handleDescriptionDoubleTap = (topic: DiscussionTopic) => {
+    const now = Date.now();
+    if (
+      lastDescTapRef.current?.topicId === topic.id &&
+      isDoubleTap(lastDescTapRef.current.atMs, now)
+    ) {
+      lastDescTapRef.current = null;
+      startEditing(topic, "description");
+      return;
+    }
+    lastDescTapRef.current = { topicId: topic.id, atMs: now };
+  };
+
+  const toggleTopicExpanded = (topicId: string) => {
+    setExpandedTopicIds((prev) => ({
+      ...prev,
+      [topicId]: !prev[topicId],
+    }));
+  };
+
+  const updateTopicContentHeight = (topicId: string, height: number) => {
+    if (!Number.isFinite(height) || height <= 0) return;
+    setTopicContentHeights((prev) => {
+      const current = prev[topicId] ?? 0;
+      if (Math.abs(current - height) < 1) return prev;
+      return { ...prev, [topicId]: height };
+    });
+  };
+
+  const updateNewTopicContentHeight = (height: number) => {
+    if (!Number.isFinite(height) || height <= 0) return;
+    setNewTopicContentHeight((prev) =>
+      Math.abs(prev - height) < 1 ? prev : height,
+    );
+  };
+
   const startAdding = () => {
+    outsideTapStartRef.current = null;
     if (editingIdRef.current !== null) {
-      void commitEdit();
+      void commitEdit(false);
     }
     addHandledRef.current = false;
     isAddingRef.current = true;
@@ -457,6 +643,8 @@ export default function WeekDiscussModal({
     newDescriptionRef.current = "";
     setNewTitle("");
     setNewDescription("");
+    setNewTopicExpanded(false);
+    setNewTopicContentHeight(0);
     setIsAdding(true);
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -523,7 +711,7 @@ export default function WeekDiscussModal({
     dismissSheet();
   };
 
-  const deleteIconColor = scheme === "dark" ? "#C25E5E" : "#B84747";
+  const deleteIconColor = scheme === "dark" ? "#E07A7A" : "#D96666";
 
   const moveTargetLabel = useMemo(() => {
     if (!topicPendingMove) return "";
@@ -542,7 +730,7 @@ export default function WeekDiscussModal({
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.backdrop}
+        style={[styles.backdrop, { backgroundColor: colors.modalOverlay }]}
       >
         <Pressable
           style={styles.backdropDismiss}
@@ -550,6 +738,41 @@ export default function WeekDiscussModal({
         />
 
         <Animated.View
+          onTouchStart={(e) => {
+            const activeKey =
+              editingIdRef.current ?? (isAddingRef.current ? "__adding__" : null);
+            if (!touchedInsideActiveCardRef.current && activeKey !== null) {
+              outsideTapStartRef.current = {
+                x: e.nativeEvent.pageX,
+                y: e.nativeEvent.pageY,
+                activeKey,
+              };
+            } else {
+              outsideTapStartRef.current = null;
+            }
+            touchedInsideActiveCardRef.current = false;
+          }}
+          onTouchEnd={(e) => {
+            const start = outsideTapStartRef.current;
+            outsideTapStartRef.current = null;
+            if (!start) return;
+            if (
+              !isTapMovementWithinThreshold(
+                e.nativeEvent.pageX - start.x,
+                e.nativeEvent.pageY - start.y,
+              )
+            ) {
+              return;
+            }
+            if (start.activeKey === "__adding__" && isAddingRef.current) {
+              void commitAdd(false);
+            } else if (editingIdRef.current === start.activeKey) {
+              void commitEdit(false);
+            }
+          }}
+          onTouchCancel={() => {
+            outsideTapStartRef.current = null;
+          }}
           style={[
             styles.sheet,
             {
@@ -558,10 +781,12 @@ export default function WeekDiscussModal({
             },
           ]}
         >
-          <View style={styles.handleArea} {...sheetPan.panHandlers}>
-            <View
-              style={[styles.handle, { backgroundColor: colors.textSecondary }]}
-            />
+          <View
+            style={styles.handleArea}
+            {...sheetPan.panHandlers}
+            hitSlop={{ top: 20, bottom: 20, left: 60, right: 60 }}
+          >
+            <View style={styles.handle} />
           </View>
 
           <ScrollView
@@ -600,9 +825,20 @@ export default function WeekDiscussModal({
               {topics.map((topic) => {
                 const isEditing = editingId === topic.id;
                 const isCompleted = topic.completed;
+                const isExpanded = Boolean(expandedTopicIds[topic.id]);
 
                 return (
-                  <View key={topic.id} style={styles.topicCard}>
+                  <View
+                    key={topic.id}
+                    style={styles.topicCard}
+                    onTouchStartCapture={
+                      isEditing
+                        ? () => {
+                            touchedInsideActiveCardRef.current = true;
+                          }
+                        : undefined
+                    }
+                  >
                     <View style={styles.topicRow}>
                       <Pressable
                         unstable_pressDelay={0}
@@ -629,7 +865,7 @@ export default function WeekDiscussModal({
                               editTitleRef.current = text;
                               setEditTitle(text);
                             }}
-                            autoFocus
+                            autoFocus={editFocusTarget === "title"}
                             textColor={colors.text}
                             underlineColor={colors.textSecondary}
                             fontFamily={resolveFont("regular")}
@@ -663,21 +899,39 @@ export default function WeekDiscussModal({
                       </View>
 
                       {isEditing ? (
-                        <Pressable
-                          unstable_pressDelay={0}
-                          onPress={() => void commitEdit()}
-                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                          style={({ pressed }) => [
-                            styles.iconButton,
-                            pressed && { opacity: 0.75 },
-                          ]}
-                        >
-                          <Ionicons
-                            name="checkmark"
-                            size={21}
-                            color={colors.text}
-                          />
-                        </Pressable>
+                        <>
+                          <Pressable
+                            unstable_pressDelay={0}
+                            onPress={() => toggleTopicExpanded(topic.id)}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            style={({ pressed }) => [
+                              styles.iconButton,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                          >
+                            <Feather
+                              name={isExpanded ? "minimize" : "maximize"}
+                              size={18}
+                              color={colors.text}
+                            />
+                          </Pressable>
+
+                          <Pressable
+                            unstable_pressDelay={0}
+                            onPress={() => void commitEdit(true)}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            style={({ pressed }) => [
+                              styles.iconButton,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                          >
+                            <Ionicons
+                              name="checkmark"
+                              size={21}
+                              color={colors.text}
+                            />
+                          </Pressable>
+                        </>
                       ) : (
                         <>
                           <Pressable
@@ -702,7 +956,23 @@ export default function WeekDiscussModal({
 
                           <Pressable
                             unstable_pressDelay={0}
-                            onPress={() => startEditing(topic)}
+                            onPress={() => toggleTopicExpanded(topic.id)}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                            style={({ pressed }) => [
+                              styles.iconButton,
+                              pressed && { opacity: 0.75 },
+                            ]}
+                          >
+                            <Feather
+                              name={isExpanded ? "minimize" : "maximize"}
+                              size={18}
+                              color={colors.text}
+                            />
+                          </Pressable>
+
+                          <Pressable
+                            unstable_pressDelay={0}
+                            onPress={() => startEditing(topic, "title")}
                             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                             style={({ pressed }) => [
                               styles.iconButton,
@@ -743,21 +1013,29 @@ export default function WeekDiscussModal({
                       </Pressable>
                     </View>
 
-                    <AnimatedDottedBorder
+                    <ExpandableDescriptionBox
+                      expanded={isExpanded}
+                      contentHeight={topicContentHeights[topic.id] ?? 0}
                       active={isEditing}
                       idleColor={colors.textSecondary}
                       highlightColor={colors.text}
                       innerBorderColor={colors.modalBackground}
-                      style={styles.descriptionBoxWrap}
                     >
                       {isEditing ? (
                         <TextInput
                           ref={editDescInputRef}
                           value={editDescription}
+                          autoFocus={editFocusTarget === "description"}
                           onChangeText={(text) => {
                             editDescriptionRef.current = text;
                             setEditDescription(text);
                           }}
+                          onContentSizeChange={(e) =>
+                            updateTopicContentHeight(
+                              topic.id,
+                              e.nativeEvent.contentSize.height,
+                            )
+                          }
                           multiline
                           scrollEnabled
                           placeholder="text will be here"
@@ -779,26 +1057,38 @@ export default function WeekDiscussModal({
                           nestedScrollEnabled
                           showsVerticalScrollIndicator={false}
                         >
-                          <Text
-                            style={[
-                              styles.descriptionText,
-                              {
-                                color: topic.description
-                                  ? isCompleted
-                                    ? colors.textSecondary
-                                    : colors.text
-                                  : colors.textSecondary,
-                                fontFamily: resolveFont(
-                                  topic.description ? "regular" : "italic",
-                                ),
-                              },
-                            ]}
+                          <Pressable
+                            onPress={() => handleDescriptionDoubleTap(topic)}
+                            style={styles.descriptionReadPressable}
                           >
-                            {topic.description || "text will be here"}
-                          </Text>
+                            <Text
+                              onLayout={(e) =>
+                                updateTopicContentHeight(
+                                  topic.id,
+                                  e.nativeEvent.layout.height +
+                                    DESC_READ_VERTICAL_PADDING,
+                                )
+                              }
+                              style={[
+                                styles.descriptionText,
+                                {
+                                  color: topic.description
+                                    ? isCompleted
+                                      ? colors.textSecondary
+                                      : colors.text
+                                    : colors.textSecondary,
+                                  fontFamily: resolveFont(
+                                    topic.description ? "regular" : "italic",
+                                  ),
+                                },
+                              ]}
+                            >
+                              {topic.description || "text will be here"}
+                            </Text>
+                          </Pressable>
                         </ScrollView>
                       )}
-                    </AnimatedDottedBorder>
+                    </ExpandableDescriptionBox>
 
                     <View
                       style={[
@@ -811,7 +1101,12 @@ export default function WeekDiscussModal({
               })}
 
               {isAdding ? (
-                <View style={styles.topicCard}>
+                <View
+                  style={styles.topicCard}
+                  onTouchStartCapture={() => {
+                    touchedInsideActiveCardRef.current = true;
+                  }}
+                >
                   <View style={styles.topicRow}>
                     <View style={styles.iconButton}>
                       <Ionicons
@@ -842,7 +1137,23 @@ export default function WeekDiscussModal({
 
                     <Pressable
                       unstable_pressDelay={0}
-                      onPress={() => void commitAdd()}
+                      onPress={() => setNewTopicExpanded((v) => !v)}
+                      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                      style={({ pressed }) => [
+                        styles.iconButton,
+                        pressed && { opacity: 0.75 },
+                      ]}
+                    >
+                      <Feather
+                        name={newTopicExpanded ? "minimize" : "maximize"}
+                        size={18}
+                        color={colors.text}
+                      />
+                    </Pressable>
+
+                    <Pressable
+                      unstable_pressDelay={0}
+                      onPress={() => void commitAdd(true)}
                       hitSlop={{ top: 8, bottom: 8, left: 6, right: 8 }}
                       style={({ pressed }) => [
                         styles.iconButton,
@@ -857,12 +1168,13 @@ export default function WeekDiscussModal({
                     </Pressable>
                   </View>
 
-                  <AnimatedDottedBorder
+                  <ExpandableDescriptionBox
+                    expanded={newTopicExpanded}
+                    contentHeight={newTopicContentHeight}
                     active
                     idleColor={colors.textSecondary}
                     highlightColor={colors.text}
                     innerBorderColor={colors.modalBackground}
-                    style={styles.descriptionBoxWrap}
                   >
                     <TextInput
                       ref={newDescInputRef}
@@ -871,6 +1183,11 @@ export default function WeekDiscussModal({
                         newDescriptionRef.current = text;
                         setNewDescription(text);
                       }}
+                      onContentSizeChange={(e) =>
+                        updateNewTopicContentHeight(
+                          e.nativeEvent.contentSize.height,
+                        )
+                      }
                       multiline
                       scrollEnabled
                       placeholder="text will be here"
@@ -885,7 +1202,7 @@ export default function WeekDiscussModal({
                         },
                       ]}
                     />
-                  </AnimatedDottedBorder>
+                  </ExpandableDescriptionBox>
                 </View>
               ) : (
                 <View style={styles.topicCard}>

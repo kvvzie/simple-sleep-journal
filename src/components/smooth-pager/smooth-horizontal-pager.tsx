@@ -277,12 +277,10 @@ const SmoothHorizontalPagerInner = forwardRef<
         baseTxRef.current = fromTx;
         currentPageRef.current = clamped;
 
-        // Ensure target page mounts offscreen without blocking spring Frame 0 unless already missing.
         if (!visibleIndicesRef.current.includes(clamped)) {
           syncWindowCenterIfNeeded(clamped, true);
         }
 
-        // Notify peer headers/grids immediately at finger release so quick flicks never wait for spring end.
         if (releaseCommit && width > 0) {
           if (clamped !== releaseCommit.dragStartPage) {
             if (!emittedScrollInGestureRef.current) {
@@ -335,7 +333,6 @@ const SmoothHorizontalPagerInner = forwardRef<
       ],
     );
 
-    // Keep pixel offset aligned when pageWidth or pageCount changes (e.g. foldable resize).
     useLayoutEffect(() => {
       if (pageWidth <= 0 || gestureActiveRef.current) return;
       const clamped = clampPagerIndex(currentPageRef.current, pageCount);
@@ -431,8 +428,6 @@ const SmoothHorizontalPagerInner = forwardRef<
 
           const alreadyRendered = visibleIndicesRef.current.includes(clamped);
           if (width > 0 && !alreadyRendered) {
-            // Retain the currently visible page while mounting the offscreen target first
-            // so rapid multi-year jumps never reveal a blank black frame before Fabric paints.
             const keepPage = currentPageRef.current;
             const epoch = jumpEpochRef.current;
             currentPageRef.current = clamped;

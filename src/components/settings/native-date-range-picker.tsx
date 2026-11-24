@@ -17,11 +17,6 @@ type Props = {
   extractIsoDate: (date: Date | null | undefined) => string;
 };
 
-/**
- * Checks at runtime whether the native binary includes Jetpack Compose
- * DateRangePickerDialogView (`@expo/ui` >= SDK 58), so older dev-client APKs
- * never crash with missing native ViewManager errors.
- */
 export function isNativeDateRangePickerAvailable(): boolean {
   if (Platform.OS !== "android") return false;
   const expoGlobal = (globalThis as {
@@ -54,9 +49,6 @@ export default function NativeDateRangePicker({
 
   let composeUi: ComposeUiModule | null = null;
   try {
-    // Lazy-require inside runtime capability guard so binaries without ExpoUI
-    // DateRangePickerDialogView never load the native view manager adapter.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     composeUi = require("@expo/ui/jetpack-compose") as ComposeUiModule;
   } catch {
     return null;

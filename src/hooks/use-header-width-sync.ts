@@ -20,10 +20,6 @@ export type UseHeaderWidthSyncOptions = {
   snapVersion?: number | string;
 };
 
-/**
- * Dynamically measures label widths offscreen and animates a centered header window
- * so surrounding chevrons track the active month/year label width without clipping.
- */
 export function useHeaderWidthSync(options: UseHeaderWidthSyncOptions) {
   const {
     activeKey,

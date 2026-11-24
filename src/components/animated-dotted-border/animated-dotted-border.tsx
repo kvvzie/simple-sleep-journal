@@ -202,11 +202,6 @@ type Props = {
   children: ReactNode;
 };
 
-/**
- * Wraps content with a rounded dotted/dashed border that slowly marches around
- * its perimeter with a gentle color pulse while `active` is true, with the SVG
- * overlay memoized so keystrokes inside `children` do not re-reconcile the SVG.
- */
 export default function AnimatedDottedBorder({
   active,
   paused = false,

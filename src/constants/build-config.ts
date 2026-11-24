@@ -14,5 +14,9 @@ export const buildConfig: BuildConfig = {
   bakedTheme: {
     ...DEFAULT_BUILD_CONFIG.bakedTheme,
     ...(rawBuildConfig.bakedTheme || {}),
+    backgrounds: {
+      ...DEFAULT_BUILD_CONFIG.bakedTheme.backgrounds,
+      ...(rawBuildConfig.bakedTheme?.backgrounds || {}),
+    },
   },
 };

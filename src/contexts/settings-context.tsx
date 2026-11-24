@@ -90,7 +90,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
     if (colorSchemePref === "automatic") return;
 
-    // Re-assert forced light/dark night-mode override if Android OS uiMode changes while active.
     const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") applyNativeOverride();
     });

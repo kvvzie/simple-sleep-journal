@@ -5,10 +5,6 @@ export type RadioDotMetrics = {
   dotSize: number;
 };
 
-/**
- * Computes proportional circle dimensions matching Ionicons radio-button geometry
- * for a given icon box size.
- */
 export function getRadioDotMetrics(size: number): RadioDotMetrics {
   const safeSize = Math.max(12, size);
   const ringSize = Math.round(safeSize * 0.86 * 10) / 10;

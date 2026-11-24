@@ -7,10 +7,6 @@ type Props = {
   filled?: boolean;
 };
 
-/**
- * Pure View implementation matching Fluent UI System Icons `reading-mode-mobile-24-o` / `-24-f`
- * (24x24 proportions: rounded 16x20 card containing three horizontal rounded text lines).
- */
 export default function ReadingModeMobileIcon({
   size = 26,
   color,

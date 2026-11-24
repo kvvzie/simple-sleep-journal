@@ -545,7 +545,6 @@ function CalendarGrid() {
       if (manualScrollSource.current === key) {
         const currentOffset = lastOffsetRef.current[key] ?? 0;
         if (!isScrollSettled(currentOffset)) {
-          // ComposePagerView can emit "idle" on DragInteraction.Stop before snapping finishes.
           pendingGestureFinishRef.current[key] = true;
           return;
         }
@@ -591,7 +590,6 @@ function CalendarGrid() {
       dragStartPosRef.current = scrollPos;
     }
 
-    // Measure threshold from where the gesture started so mid-settle grabs still require full swipe distance.
     const gestureMovedScrollPos = anchor + (scrollPos - dragStartPosRef.current);
     const preview = getDragPreviewPage({
       scrollPos: gestureMovedScrollPos,

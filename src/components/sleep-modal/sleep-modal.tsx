@@ -52,8 +52,11 @@ import {
   hasSleepSessionChanges,
   type SleepSessionSnapshot,
 } from "../top-toast/top-toast.utils";
+import { isTapMovementWithinThreshold } from "@/lib/editor-utils";
 import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
-import SleepModalCommentSection from "./sleep-modal-comment";
+import SleepModalCommentSection, {
+  type SleepModalCommentHandle,
+} from "./sleep-modal-comment";
 import { styles } from "./sleep-modal.styles";
 import TodoListSection from "./todo-list-section";
 
@@ -169,8 +172,14 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
 
   const [readyHours, setReadyHours] = useState<number | null>(null);
   const [pagerKey, setPagerKey] = useState(0);
+  const [openSessionKey, setOpenSessionKey] = useState(0);
 
   const hoursWheelRef = useRef<WheelPickerHandle>(null);
+  const commentSectionRef = useRef<SleepModalCommentHandle>(null);
+  const touchedInsideCommentRef = useRef(false);
+  const commentOutsideTapStartRef = useRef<{ x: number; y: number } | null>(
+    null,
+  );
   const initialSnapshotRef = useRef<SleepSessionSnapshot | null>(null);
   const todosModifiedRef = useRef(false);
 
@@ -253,20 +262,25 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     stateRef.current.dirty = true;
   }, []);
 
+  const handleTouchInsideComment = useCallback(() => {
+    touchedInsideCommentRef.current = true;
+  }, []);
+
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const closedRef = useRef(false);
 
   useEffect(() => {
     if (visible) {
       setNowMs(Date.now());
+      setOpenSessionKey((k) => k + 1);
       loadExisting();
       closedRef.current = false;
       translateY.setValue(SCREEN_HEIGHT);
-      Animated.spring(translateY, {
+      Animated.timing(translateY, {
         toValue: 0,
+        duration: 185,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
-        damping: 20,
-        stiffness: 200,
       }).start();
     } else {
       setTodoPendingDelete(null);
@@ -489,6 +503,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     if (closedRef.current) return;
 
     closedRef.current = true;
+    commentSectionRef.current?.exitEditMode(true);
     Keyboard.dismiss();
     const s = stateRef.current;
     const selectedAmounts = getSelectedBodyCareAmounts(
@@ -1076,6 +1091,36 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
         {visible && <StatusBar style="light" />}
         <View
           style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
+          onTouchStart={(e) => {
+            if (
+              !touchedInsideCommentRef.current &&
+              commentSectionRef.current?.isEditing()
+            ) {
+              commentOutsideTapStartRef.current = {
+                x: e.nativeEvent.pageX,
+                y: e.nativeEvent.pageY,
+              };
+            } else {
+              commentOutsideTapStartRef.current = null;
+            }
+            touchedInsideCommentRef.current = false;
+          }}
+          onTouchEnd={(e) => {
+            const start = commentOutsideTapStartRef.current;
+            commentOutsideTapStartRef.current = null;
+            if (!start) return;
+            if (
+              isTapMovementWithinThreshold(
+                e.nativeEvent.pageX - start.x,
+                e.nativeEvent.pageY - start.y,
+              )
+            ) {
+              commentSectionRef.current?.exitEditMode(false);
+            }
+          }}
+          onTouchCancel={() => {
+            commentOutsideTapStartRef.current = null;
+          }}
         >
           <Animated.View
             pointerEvents="box-none"
@@ -1124,7 +1169,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
               >
                 hours of sleep
               </Text>
-              {readyHours !== null && (
+              {readyHours !== null ? (
                 <WheelPicker
                   ref={hoursWheelRef}
                   pagerKey={pagerKey}
@@ -1139,6 +1184,8 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
                   pageStyle={styles.hoursPage}
                   labelStyle={hoursLabelStyle}
                 />
+              ) : (
+                <View style={[styles.hoursColumn, styles.hoursPlaceholder]} />
               )}
 
               {features.moodStarsEnabled && (
@@ -1489,11 +1536,13 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
 
               {features.commentsEnabled && (
                 <SleepModalCommentSection
+                  ref={commentSectionRef}
                   initialComment={initialComment}
-                  resetKey={pagerKey}
+                  resetKey={openSessionKey}
                   colors={colors}
                   resolveFont={resolveFont}
                   onCommentChange={handleCommentChange}
+                  onTouchInside={handleTouchInsideComment}
                 />
               )}
 

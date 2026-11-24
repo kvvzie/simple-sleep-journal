@@ -110,18 +110,11 @@ const MONTH_5_SLOTS: PositionedCellSlot[] = [
   { xRatio: 0.76, yRatio: 0.82 },
 ];
 
-/**
- * Returns 13- or 14-point 5-pointed star coordinates (top-to-bottom, left-to-right),
- * splitting the center point into two horizontal neighbors when Q4 has 14 weeks.
- */
 export function getQuarterStarLayout(weekCount: number): PositionedCellSlot[] {
   if (weekCount >= 14) return STAR_14_SLOTS.slice(0, weekCount);
   return STAR_13_SLOTS.slice(0, weekCount);
 }
 
-/**
- * Returns a 2x2 grid for 4-week months, or a 2x2 + 1 centered quincunx for 5-week months.
- */
 export function getMonthQuincunxLayout(weekCount: number): PositionedCellSlot[] {
   if (weekCount >= 5) return MONTH_5_SLOTS.slice(0, weekCount);
   return MONTH_4_SLOTS.slice(0, weekCount);
@@ -208,10 +201,6 @@ export function formatUtcIsoDate(ms: number): string {
   return `${y}-${m}-${day}`;
 }
 
-/**
- * Computes ISO-8601 week year, week number (1..53), and canonical YYYY-Www key
- * for a local calendar Y/M/D using UTC math to avoid DST edge cases.
- */
 export function getIsoWeekFromYmd(
   year: number,
   monthIndex: number,
@@ -252,9 +241,6 @@ export function getIsoWeekFromIsoDateStr(isoDate: string): {
   );
 }
 
-/**
- * Dec 28 always falls inside the final ISO week of its own ISO week-year (52 or 53).
- */
 export function getIsoWeeksInYear(weekYear: number): number {
   return getIsoWeekFromYmd(weekYear, 11, 28).week;
 }
@@ -421,10 +407,6 @@ export function yearQuarterToPage(
   );
 }
 
-/**
- * Each ISO week belongs to the calendar month that holds its Thursday (>= 4 days in that month).
- * This guarantees every month has strictly 4 or 5 weeks with zero cross-month duplicates.
- */
 export function getIsoMonthForIsoWeek(
   weekYear: number,
   week: number,
@@ -703,11 +685,6 @@ export function sanitizeImportedDiscussionTopics(
   return result;
 }
 
-/**
- * Determines whether page `p` should stay mounted inside `ComposePagerView`.
- * During active zoom transitions only the exact target page mounts to keep UI free of hitching;
- * once settled, a generous window prevents blank frames during fast horizontal flicks.
- */
 export function isRecapPageNear(params: {
   p: number;
   page: number;
@@ -753,11 +730,6 @@ export function isRecapPageNear(params: {
   );
 }
 
-/**
- * Only apply a short post-pinch swipe cooldown when the user aborted a pinch
- * without changing zoom levels. Completed zoom transitions already mount a
- * fresh pager, so adding cooldown afterwards would swallow valid swipes.
- */
 export function shouldApplyPinchCooldown(
   wasActive: boolean,
   wasTriggered: boolean,
@@ -781,13 +753,6 @@ const ZOOM_LEVEL_ORDER: readonly RecapZoomLevel[] = [
   "month",
 ];
 
-/**
- * Evaluates whether a continuous two-finger pinch should trigger the next zoom
- * level. Stage 0 (initial pinch) uses a comfortable responsive threshold; Stage
- * 1+ (continuing the same two-finger gesture without lifting, e.g. half ->
- * quarter -> month) requires a deliberately large extra spread/pinch so normal
- * gestures never skip `quarter` accidentally.
- */
 export function evaluatePinchZoomStep(params: {
   currentZoomLevel: RecapZoomLevel;
   anchorDist: number;
@@ -828,8 +793,6 @@ export function evaluatePinchZoomStep(params: {
     return null;
   }
 
-  // Stage 1+: continuous same-pinch continuation must keep going in the same
-  // direction AND cross both the large pixel delta and large ratio thresholds.
   if (
     canZoomIn &&
     allowedDirection === "in" &&

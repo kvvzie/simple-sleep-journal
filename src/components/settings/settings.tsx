@@ -17,6 +17,7 @@ import {
   importBackup,
   importLogs,
 } from "@/lib/db";
+import { parseBackupJsonPayload } from "@/lib/db-import.utils";
 import {
   buildCsvExportContent,
   buildJsonExportPayload,
@@ -212,7 +213,11 @@ function Settings() {
     showToast({ message: "font reset", icon: "refresh-outline" });
   };
 
-  const handlePickBackground = async (targetScreen: "calendar" | "settings") => {
+  const handlePickBackground = async (
+    targetScreen: "calendar" | "toDiscuss" | "settings",
+  ) => {
+    const label =
+      targetScreen === "toDiscuss" ? "weekly recaps" : targetScreen;
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: ["image/*", "*/*"],
@@ -230,15 +235,19 @@ function Settings() {
 
       const compressedDataUri = `data:image/jpeg;base64,${manipulated.base64}`;
       updateBackground(targetScreen, compressedDataUri);
-      showToast({ message: `${targetScreen} background updated`, icon: "image-outline" });
+      showToast({ message: `${label} background updated`, icon: "image-outline" });
     } catch {
       showToast({ message: "failed to load image", icon: "alert-circle-outline" });
     }
   };
 
-  const handleClearBackground = (targetScreen: "calendar" | "settings") => {
+  const handleClearBackground = (
+    targetScreen: "calendar" | "toDiscuss" | "settings",
+  ) => {
+    const label =
+      targetScreen === "toDiscuss" ? "weekly recaps" : targetScreen;
     updateBackground(targetScreen, null);
-    showToast({ message: `${targetScreen} background removed`, icon: "trash-outline" });
+    showToast({ message: `${label} background removed`, icon: "trash-outline" });
   };
 
   const openExportSetup = (type: "json" | "txt" | "csv" | "theme") => {
@@ -394,34 +403,21 @@ function Settings() {
       const content = await readTextFileFromUri(fileUri);
       const parsed = JSON.parse(content);
 
-      if (Array.isArray(parsed)) {
-        await importLogs(parsed);
-      } else if (
-        parsed &&
-        (Array.isArray(parsed.logs) ||
-          Array.isArray(parsed.todos) ||
-          Array.isArray(parsed.discussionTopics))
-      ) {
-        const importedLogs = Array.isArray(parsed.logs) ? parsed.logs : [];
-        const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
-        const importedBodyCareLogs = Array.isArray(parsed.bodyCareLogs)
-          ? parsed.bodyCareLogs
-          : [];
-        const importedTodos = Array.isArray(parsed.todos) ? parsed.todos : [];
-        const importedDiscussionTopics = Array.isArray(
-          parsed.discussionTopics,
-        )
-          ? parsed.discussionTopics
-          : [];
-        await importBackup(
-          importedLogs,
-          edits,
-          importedBodyCareLogs,
-          importedTodos,
-          importedDiscussionTopics,
-        );
-      } else {
+      const backup = parseBackupJsonPayload(parsed);
+      if (!backup) {
         throw new Error("Invalid format");
+      }
+
+      if (backup.kind === "legacy-array") {
+        await importLogs(backup.logs);
+      } else {
+        await importBackup(
+          backup.logs,
+          backup.edits,
+          backup.bodyCareLogs,
+          backup.todos,
+          backup.discussionTopics,
+        );
       }
 
       showToast({ message: "data imported", icon: "checkmark-outline" });
@@ -1484,6 +1480,95 @@ function Settings() {
                   {backgrounds.calendar && (
                     <Pressable
                       onPress={() => handleClearBackground("calendar")}
+                      style={[
+                        styles.studioSmallBtn,
+                        {
+                          backgroundColor: colors.background,
+                          flex: 1,
+                          alignItems: "center",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.studioSmallBtnText,
+                          {
+                            color: colors.text,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                      >
+                        remove
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+
+              <View
+                style={[
+                  styles.studioCard,
+                  {
+                    backgroundColor: colors.backgroundElement,
+                    borderColor: colors.textSecondary,
+                  },
+                ]}
+              >
+                <View style={styles.wallpaperPreviewRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.studioLabel,
+                        { color: colors.text, fontFamily: resolveFont("bold") },
+                      ]}
+                    >
+                      weekly recaps wallpaper
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                        fontFamily: resolveFont("italic"),
+                      }}
+                    >
+                      {backgrounds.toDiscuss ? "custom image active" : "none"}
+                    </Text>
+                  </View>
+                  {backgrounds.toDiscuss && (
+                    <Image
+                      source={{ uri: backgrounds.toDiscuss }}
+                      style={styles.wallpaperThumb}
+                      contentFit="cover"
+                    />
+                  )}
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                  <Pressable
+                    onPress={() => handlePickBackground("toDiscuss")}
+                    style={[
+                      styles.studioSmallBtn,
+                      {
+                        backgroundColor: colors.text,
+                        flex: 1,
+                        alignItems: "center",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.studioSmallBtnText,
+                        {
+                          color: colors.background,
+                          fontFamily: resolveFont("bold"),
+                        },
+                      ]}
+                    >
+                      {backgrounds.toDiscuss ? "replace" : "choose photo"}
+                    </Text>
+                  </Pressable>
+                  {backgrounds.toDiscuss && (
+                    <Pressable
+                      onPress={() => handleClearBackground("toDiscuss")}
                       style={[
                         styles.studioSmallBtn,
                         {

@@ -1,18 +1,19 @@
 {
   "expo": {
-    "name": "mood journal (dynamic)",
+    "name": "mood journal",
     "slug": "sleepinapp",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "comshittyassappssleepinappdynamic",
+    "scheme": "sleepinapp",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.shittyassapps.sleepinapp.dynamic"
+      "bundleIdentifier": "com.shittyassapps.sleepinapp"
     },
     "android": {
-      "package": "com.shittyassapps.sleepinapp.dynamic",
+      "package": "com.shittyassapps.sleepinapp",
+      "versionCode": 8,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
@@ -47,7 +48,8 @@
           "enforceContrast": false
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/with-agp9-compat"
     ],
     "experiments": {
       "typedRoutes": true,

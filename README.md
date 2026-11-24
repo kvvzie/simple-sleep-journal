@@ -26,14 +26,14 @@ Zero cloud sync, zero analytics, and zero telemetry. Every entry, task, weekly n
   - **Quarter (`Quarter`)**: 3-column monthly breakdown showing every ISO week and its compact date range.
   - **Month (`Month`)**: Rich quincunx card layout per ISO week (using the ISO Thursday rule) displaying full Monday-Sunday date ranges, open/done topic counts, and topic previews.
 - **Week Detail Sheet (`WeekDiscussModal`)**:
-  - Add, edit, complete, and delete structured topics with both titles and multi-line descriptions.
+  - Add, edit, complete, and delete structured topics with both titles and multi-line descriptions, scrollable read mode with double-tap to edit, tap-outside exit, unified drag-handle geometry matching `SleepModal`, and per-topic ~3.2x description expansion (`maximize`/`minimize`).
   - **One-Tap Carry-Over**: Move unfinished topics forward to the next week or pull past open topics into the current week with instant feedback (`moved to WXX`).
   - Clear an entire week cleanly with confirmation prompts.
 
 ### 3. Day & Sleep Logging Sheet
 - **Gesture-Driven Hours Wheel Picker**: Smooth vertical `Animated` + `PanResponder` cyclical wheel (`0h` to `24h`) with velocity flick projection, rubber-band bounds, and automatic scroll locking inside the sheet.
 - **Scrubbable 10-Star Mood Rating**: Tap or drag horizontally across 10 stars for instant rating updates.
-- **Fast Daily Notes / Comments**: Isolated memoized comment section with a bounded scrollable input (`maxHeight: 240`) and a memoized animated dotted focus border that runs continuously while typing without re-rendering the modal.
+- **Fast Daily Notes / Comments**: Isolated memoized comment section with a scrollable read mode (double-tap or right-side edit button to edit, checkmark or tap-outside to exit), a left-side 2x expand/collapse toggle (`maximize`/`minimize`), and a memoized animated dotted focus border that runs continuously while typing without re-rendering the modal.
 - **Daily To-Do List**: Centered task checklist with 3-day carry-over (`created_date + 3 days`), inline add (`+ new task`) and multi-line edit modes, elapsed-hour timestamps (`(<1 hours ago)` up to `(>96 hours ago)`), and deletion confirmation dialogs.
 - **Chronological Audit History**: Expandable edit trail inside each logged day recording previous vs. new values for hours, mood, and comments.
 - **Optional Self-Harm Tracker**: Disabled by default in vanilla builds and toggleable at build time or runtime (in `dynamic` mode). Provides a 4-quadrant razor blade usage counter (`top-left`, `top-right`, `bottom-left`, `bottom-right`) with visual overlays for Astra Superior Platinum, Gillette Platinum, and Isana Men Classic.
@@ -54,8 +54,8 @@ Zero cloud sync, zero analytics, and zero telemetry. Every entry, task, weekly n
 2. **`baked` (Static Custom Build)**: Created via the Build Wizard with compile-time branding, custom fonts, fixed palettes, background wallpapers, and compile-time feature flags. Can export and import `.moodtheme` files, and resetting restores the baked configuration.
 3. **`dynamic` (In-App Customizable)**: Unlocks the full Appearance Studio in Settings:
    - Load custom `.ttf` / `.otf` fonts directly from phone storage.
-   - Pick colors via quick palettes (Vanilla, Cyberpunk, Mocha, Matcha, Twilight) or the interactive HSV/Hex color picker.
-   - Assign separate background wallpapers for the Calendar and Settings screens.
+   - Pick colors via the interactive HSV/Hex color picker.
+   - Assign separate background wallpapers for the Calendar, Weekly Recaps, and Settings screens.
    - Toggle individual feature flags at runtime (Weekly Recaps, To-Do List, Mood Stars, Comments, Grid Picker, Color Scheme Switcher, Self-Harm Tracker).
    - Export and import self-contained `.moodtheme` files with embedded base64 wallpapers.
 
@@ -73,18 +73,22 @@ npm run wizard
 ```
 
 ### Headless / Automated Build Flags
+Add custom `.json` or `.moodtheme` files to the top-level `themes/` directory (starting with `themes/default.json` — see [themes/TUTORIAL.md](themes/TUTORIAL.md) for the full format guide) so the wizard discovers them automatically, or pass manual hex color flags directly:
+
 ```bash
 node scripts/build-wizard.mjs \
   --mode=baked \
   --name="mood journal (baked)" \
   --packageId="com.shittyassapps.sleepinapp.baked" \
   --bodyCare=false \
+  --theme=default \
   --bg="#1E0538" \
   --text="#FFE600" \
   --element="#6B1D99" \
   --selected="#00FF99" \
   --textSecondary="#FF70C5" \
   --calendarBg="assets/images/custom-cat-bg.png" \
+  --weeklyRecapsBg="none" \
   --settingsBg="none"
 ```
 
@@ -99,7 +103,7 @@ The wizard automatically updates:
 ## Testing & Verification
 
 ```bash
-# Run unit tests (native Node.js runner, 91 tests)
+# Run unit tests (native Node.js runner, 102 tests)
 npm test
 
 # Run TypeScript type checking
