@@ -2,12 +2,13 @@ import CalendarGrid from "@/components/calendar-grid";
 import NavBar from "@/components/nav-bar";
 import Settings from "@/components/settings";
 import ToDiscuss from "@/components/to-discuss";
+import { ToastHost } from "@/components/top-toast";
 import { useAppearance } from "@/contexts/appearance-context";
 import { useNavDirection } from "@/contexts/nav-direction-context";
 import { getNavProgress, type ScreenKey } from "@/contexts/nav-utils";
 import { useSettings } from "@/contexts/settings-context";
 import { Image } from "expo-image";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   StyleSheet,
@@ -18,8 +19,29 @@ import {
 export default function TabsLayout() {
   const { screen } = useNavDirection();
   const { toDiscussEnabled } = useSettings();
+  const [toDiscussMounted, setToDiscussMounted] = useState(toDiscussEnabled);
   const { width } = useWindowDimensions();
   const { colors, backgrounds } = useAppearance();
+
+  useEffect(() => {
+    if (!toDiscussEnabled) {
+      setToDiscussMounted(false);
+      return;
+    }
+    if (toDiscussMounted) return;
+    let cancelled = false;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    const rafId = requestAnimationFrame(() => {
+      timerId = setTimeout(() => {
+        if (!cancelled) setToDiscussMounted(true);
+      }, 140);
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      if (timerId !== null) clearTimeout(timerId);
+    };
+  }, [toDiscussEnabled, toDiscussMounted]);
 
   const targetProgress = getNavProgress(screen);
   const navProgress = useRef(new Animated.Value(targetProgress)).current;
@@ -98,7 +120,7 @@ export default function TabsLayout() {
         <CalendarGrid />
       </Animated.View>
 
-      {toDiscussEnabled && (
+      {toDiscussEnabled && toDiscussMounted && (
         <Animated.View
           key="to-discuss"
           pointerEvents={screen === "to-discuss" ? "auto" : "none"}
@@ -131,6 +153,7 @@ export default function TabsLayout() {
       </Animated.View>
 
       <NavBar />
+      <ToastHost hostId="root" />
     </View>
   );
 }

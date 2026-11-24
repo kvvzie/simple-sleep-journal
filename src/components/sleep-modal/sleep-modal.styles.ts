@@ -39,12 +39,17 @@ export const styles = StyleSheet.create({
   commentBox: {
     width: "100%",
     minHeight: 120,
-    borderWidth: 1.5,
-    borderStyle: "dashed",
     borderRadius: 12,
     marginTop: 8,
+    position: "relative",
   },
-  commentInput: { padding: 14, fontSize: 18, textAlignVertical: "top" },
+  commentInput: {
+    padding: 14,
+    fontSize: 18,
+    minHeight: 116,
+    maxHeight: 240,
+    textAlignVertical: "top",
+  },
   deleteButton: {
     marginTop: 20,
     paddingVertical: 12,
@@ -82,7 +87,7 @@ export const styles = StyleSheet.create({
 
   bodyCareMenu: {
     width: "100%",
-    marginTop: 12,
+    paddingTop: 12,
     paddingBottom: 16,
   },
 

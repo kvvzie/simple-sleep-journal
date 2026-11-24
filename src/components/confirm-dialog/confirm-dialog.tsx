@@ -22,6 +22,8 @@ export default function ConfirmDialog({
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={onCancel}
     >
       <View style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}>

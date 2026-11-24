@@ -238,4 +238,37 @@ export const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 1,
   },
+  dateRangeRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  dateRangeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  dateRangeText: {
+    fontSize: 13.5,
+    flex: 1,
+  },
+  dateRangeClearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  dateRangeHint: {
+    fontSize: 11.5,
+    marginBottom: 6,
+    alignSelf: "flex-start",
+    opacity: 0.78,
+  },
 });

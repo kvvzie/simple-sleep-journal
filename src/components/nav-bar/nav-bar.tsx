@@ -1,6 +1,7 @@
 import { useAppearance } from "@/contexts/appearance-context";
 import { useNavDirection } from "@/contexts/nav-direction-context";
 import {
+  getNavBarBottomOffset,
   getNextTabIndexOnSwipe,
   getTabIndex,
   getVisibleTabs,
@@ -10,6 +11,7 @@ import { useSettings } from "@/contexts/settings-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef } from "react";
 import { Animated, PanResponder, Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   MIDDLE_BUTTON_WIDTH,
   OUTER_BUTTON_WIDTH,
@@ -40,6 +42,7 @@ export default function NavBar() {
   const { colors } = useAppearance();
   const { toDiscussEnabled } = useSettings();
   const { screen, setScreen } = useNavDirection();
+  const insets = useSafeAreaInsets();
 
   const tabs = getVisibleTabs(toDiscussEnabled);
   const activeIndex = getTabIndex(screen, toDiscussEnabled);
@@ -142,6 +145,7 @@ export default function NavBar() {
       style={[
         styles.wrapper,
         {
+          bottom: getNavBarBottomOffset(insets.bottom),
           borderColor: colors.textSecondary,
           backgroundColor: hexToRgba(colors.background, 0.5),
         },

@@ -9,7 +9,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Appearance, Platform, useWindowDimensions } from "react-native";
+import { Appearance, AppState, Platform, useWindowDimensions } from "react-native";
 
 export type ColorSchemePref = "light" | "automatic" | "dark";
 export { GridSize, GRID_STEPS };
@@ -81,9 +81,24 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loaded || Platform.OS === "web") return;
-    try {
-      Appearance.setColorScheme(getNativeAppearanceOverride(colorSchemePref));
-    } catch {}
+    const applyNativeOverride = () => {
+      try {
+        Appearance.setColorScheme(getNativeAppearanceOverride(colorSchemePref));
+      } catch {}
+    };
+    applyNativeOverride();
+
+    if (colorSchemePref === "automatic") return;
+
+    // Re-assert forced light/dark night-mode override if Android OS uiMode changes while active.
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") applyNativeOverride();
+    });
+    const appearanceSub = Appearance.addChangeListener(applyNativeOverride);
+    return () => {
+      appStateSub.remove();
+      appearanceSub.remove();
+    };
   }, [colorSchemePref, loaded]);
 
   const stepIndex = isWideScreen ? stepIndexWide : stepIndexNarrow;

@@ -1,15 +1,19 @@
 import { useAppearance } from "@/contexts/appearance-context";
+import { getNavBarClearance } from "@/contexts/nav-utils";
 import {
   ColorSchemePref,
   GRID_STEPS,
   useSettings,
 } from "@/contexts/settings-context";
+import { useToast } from "@/contexts/toast-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import {
   getAllBodyCareLogs,
+  getAllDiscussionTopics,
   getAllEdits,
   getAllLogs,
   getAllTodos,
+  getExportDateBounds,
   importBackup,
   importLogs,
 } from "@/lib/db";
@@ -17,6 +21,9 @@ import {
   buildCsvExportContent,
   buildJsonExportPayload,
   buildTxtExportContent,
+  formatExportDateRangeLabel,
+  isoDateToUtcMidnightIso,
+  utcDateToIsoDate,
 } from "@/lib/export-utils";
 import { readTextFileFromUri, saveFileToDevice } from "@/lib/file-saver";
 import { ThemePaletteColors } from "@/types/appearance";
@@ -38,11 +45,16 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GoogleColorPicker } from "../color-picker/google-color-picker";
 import AnimatedRadioDot from "../animated-radio-dot";
 import ConfirmDialog from "../confirm-dialog";
 import { getLocalTodayIsoDate } from "../sleep-modal/todo.utils";
+import { ToastHost } from "../top-toast";
 import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
+import NativeDateRangePicker, {
+  isNativeDateRangePickerAvailable,
+} from "./native-date-range-picker";
 import { styles } from "./settings.styles";
 
 const MAX_STEP = GRID_STEPS.length - 1;
@@ -54,6 +66,8 @@ const columnsStepForPage = (page: number) => MAX_STEP - page;
 
 function Settings() {
   const scheme = useAppColorScheme();
+  const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const {
     mode,
     canExportTheme,
@@ -87,22 +101,22 @@ function Settings() {
   const rowsRef = useRef<WheelPickerHandle>(null);
   const columnsRef = useRef<WheelPickerHandle>(null);
   const gridLockRef = useRef<string | null>(null);
+  const [wheelScrollLocked, setWheelScrollLocked] = useState(false);
 
   const [studioModalVisible, setStudioModalVisible] = useState(false);
   const [activeColorTab, setActiveColorTab] = useState<keyof ThemePaletteColors>("background");
   const [exportFormatDialogVisible, setExportFormatDialogVisible] = useState(false);
   const [importChoiceDialogVisible, setImportChoiceDialogVisible] = useState(false);
   const [exportType, setExportType] = useState<"json" | "txt" | "csv" | "theme" | null>(null);
+  const [dateRangePickerVisible, setDateRangePickerVisible] = useState(false);
   const [fileName, setFileName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [pickerDefaultStart, setPickerDefaultStart] = useState("");
+  const [pickerDefaultEnd, setPickerDefaultEnd] = useState("");
+  const nativeRangePickerSupported = isNativeDateRangePickerAvailable();
   const [themeExportName, setThemeExportName] = useState("");
-  const [infoDialog, setInfoDialog] = useState({ visible: false, message: "" });
   const [resetConfirmVisible, setResetConfirmVisible] = useState(false);
-
-  const showInfo = (message: string) => {
-    setInfoDialog({ visible: true, message });
-  };
 
   const canIncreaseRows = stepIndex < MAX_STEP;
   const canDecreaseRows = stepIndex > 0;
@@ -184,18 +198,18 @@ function Settings() {
       });
 
       if (ok) {
-        showInfo(`Font "${fontName}" applied successfully!`);
+        showToast({ message: "font applied", icon: "checkmark-outline" });
       } else {
-        showInfo("Could not load font file.");
+        showToast({ message: "invalid font file", icon: "alert-circle-outline" });
       }
     } catch {
-      showInfo("Failed to pick font.");
+      showToast({ message: "failed to pick font", icon: "alert-circle-outline" });
     }
   };
 
   const handleResetFont = async () => {
     await setCustomFont(null);
-    showInfo("Font reset to default Redaction.");
+    showToast({ message: "font reset", icon: "refresh-outline" });
   };
 
   const handlePickBackground = async (targetScreen: "calendar" | "settings") => {
@@ -216,19 +230,20 @@ function Settings() {
 
       const compressedDataUri = `data:image/jpeg;base64,${manipulated.base64}`;
       updateBackground(targetScreen, compressedDataUri);
-      showInfo(`${targetScreen} background updated!`);
+      showToast({ message: `${targetScreen} background updated`, icon: "image-outline" });
     } catch {
-      showInfo("Failed to load image file.");
+      showToast({ message: "failed to load image", icon: "alert-circle-outline" });
     }
   };
 
   const handleClearBackground = (targetScreen: "calendar" | "settings") => {
     updateBackground(targetScreen, null);
-    showInfo(`${targetScreen} background removed.`);
+    showToast({ message: `${targetScreen} background removed`, icon: "trash-outline" });
   };
 
   const openExportSetup = (type: "json" | "txt" | "csv" | "theme") => {
     setExportFormatDialogVisible(false);
+    setDateRangePickerVisible(false);
     setExportType(type);
     const today = new Date().toISOString().split("T")[0];
     if (type === "theme") {
@@ -237,19 +252,39 @@ function Settings() {
       setFileName(`sleepinapp_${type}_${today}`);
       setStartDate("");
       setEndDate("");
+      setPickerDefaultStart("");
+      setPickerDefaultEnd("");
     }
+  };
+
+  const openDateRangePicker = async () => {
+    if (!startDate && !endDate) {
+      try {
+        const bounds = await getExportDateBounds(features.bodyCareEnabled);
+        setPickerDefaultStart(bounds.minDate ?? "");
+        setPickerDefaultEnd(bounds.maxDate ?? "");
+      } catch {
+        setPickerDefaultStart("");
+        setPickerDefaultEnd("");
+      }
+    } else {
+      setPickerDefaultStart(startDate);
+      setPickerDefaultEnd(endDate);
+    }
+    setDateRangePickerVisible(true);
   };
 
   const handleExportConfirm = async () => {
     if (!exportType) return;
+    setDateRangePickerVisible(false);
 
     if (exportType === "theme") {
       setExportType(null);
       const res = await exportTheme(themeExportName || "My Theme");
       if (res.success) {
-        showInfo("App look exported successfully (.moodtheme)!");
+        showToast({ message: "theme exported", icon: "checkmark-outline" });
       } else if (!res.canceled) {
-        showInfo(res.error || "Failed to export look.");
+        showToast({ message: "theme export failed", icon: "alert-circle-outline" });
       }
       return;
     }
@@ -262,6 +297,7 @@ function Settings() {
         ? await getAllBodyCareLogs()
         : [];
       const todos = await getAllTodos();
+      const discussionTopics = await getAllDiscussionTopics();
       const todayDate = getLocalTodayIsoDate();
 
       let fileContent = "";
@@ -280,6 +316,7 @@ function Settings() {
           edits: allEdits,
           bodyCareLogs,
           todos,
+          discussionTopics,
           bodyCareEnabled: features.bodyCareEnabled,
         });
         fileContent = JSON.stringify(exportPayload, null, 2);
@@ -292,6 +329,7 @@ function Settings() {
           edits: allEdits,
           bodyCareLogs,
           todos,
+          discussionTopics,
           startDate,
           endDate,
           moodStarsEnabled: features.moodStarsEnabled,
@@ -309,6 +347,7 @@ function Settings() {
           edits: allEdits,
           bodyCareLogs,
           todos,
+          discussionTopics,
           startDate,
           endDate,
           moodStarsEnabled: features.moodStarsEnabled,
@@ -330,12 +369,12 @@ function Settings() {
       });
 
       if (result.success) {
-        showInfo(`File saved successfully as ${finalFileName}.`);
+        showToast({ message: `exported ${finalFileName}`, icon: "checkmark-outline" });
       } else if (!result.canceled) {
-        showInfo("Failed to export your data file.");
+        showToast({ message: "export failed", icon: "alert-circle-outline" });
       }
     } catch {
-      showInfo("An error occurred during export.");
+      showToast({ message: "export failed", icon: "alert-circle-outline" });
     }
   };
 
@@ -357,27 +396,39 @@ function Settings() {
 
       if (Array.isArray(parsed)) {
         await importLogs(parsed);
-      } else if (parsed && (Array.isArray(parsed.logs) || Array.isArray(parsed.todos))) {
+      } else if (
+        parsed &&
+        (Array.isArray(parsed.logs) ||
+          Array.isArray(parsed.todos) ||
+          Array.isArray(parsed.discussionTopics))
+      ) {
         const importedLogs = Array.isArray(parsed.logs) ? parsed.logs : [];
         const edits = Array.isArray(parsed.edits) ? parsed.edits : [];
         const importedBodyCareLogs = Array.isArray(parsed.bodyCareLogs)
           ? parsed.bodyCareLogs
           : [];
         const importedTodos = Array.isArray(parsed.todos) ? parsed.todos : [];
+        const importedDiscussionTopics = Array.isArray(
+          parsed.discussionTopics,
+        )
+          ? parsed.discussionTopics
+          : [];
         await importBackup(
           importedLogs,
           edits,
           importedBodyCareLogs,
           importedTodos,
+          importedDiscussionTopics,
         );
       } else {
         throw new Error("Invalid format");
       }
 
-      showInfo("Data has been successfully imported!");
+      showToast({ message: "data imported", icon: "checkmark-outline" });
       DeviceEventEmitter.emit("refreshCalendarGrid");
+      DeviceEventEmitter.emit("refreshToDiscuss");
     } catch {
-      showInfo("Please select a valid sleepinapp backup file (JSON).");
+      showToast({ message: "invalid backup file", icon: "alert-circle-outline" });
     }
   };
 
@@ -385,10 +436,10 @@ function Settings() {
     setImportChoiceDialogVisible(false);
     const res = await importThemeFromFile();
     if (res.success) {
-      showInfo("App look successfully imported!");
+      showToast({ message: "theme imported", icon: "checkmark-outline" });
       DeviceEventEmitter.emit("refreshCalendarGrid");
     } else if (!res.canceled) {
-      showInfo(res.error || "Failed to import theme file.");
+      showToast({ message: "import failed", icon: "alert-circle-outline" });
     }
   };
 
@@ -396,11 +447,7 @@ function Settings() {
     setResetConfirmVisible(false);
     setStudioModalVisible(false);
     await resetTheme();
-    showInfo(
-      mode === "baked"
-        ? "Appearance reset to baked build defaults!"
-        : "Appearance reset to vanilla defaults!",
-    );
+    showToast({ message: "appearance reset", icon: "refresh-outline" });
     DeviceEventEmitter.emit("refreshCalendarGrid");
   };
 
@@ -415,7 +462,10 @@ function Settings() {
         <Pressable
           onPress={() => setStudioModalVisible(true)}
           hitSlop={16}
-          style={styles.topRightFloatingButton}
+          style={[
+            styles.topRightFloatingButton,
+            { top: Math.max(48, insets.top + 16) },
+          ]}
         >
           <Ionicons name="color-wand-outline" size={24} color={colors.text} />
         </Pressable>
@@ -423,7 +473,10 @@ function Settings() {
         <Pressable
           onPress={() => setResetConfirmVisible(true)}
           hitSlop={16}
-          style={styles.topRightFloatingButton}
+          style={[
+            styles.topRightFloatingButton,
+            { top: Math.max(48, insets.top + 16) },
+          ]}
         >
           <Ionicons
             name="arrow-undo-outline"
@@ -434,7 +487,14 @@ function Settings() {
       ) : null}
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        scrollEnabled={!wheelScrollLocked}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(40, insets.top + 16),
+            paddingBottom: getNavBarClearance(insets.bottom),
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerRow}>
@@ -468,6 +528,7 @@ function Settings() {
                 totalPages={GRID_STEPS.length}
                 renderLabel={(p) => String(GRID_STEPS[p].rows)}
                 onSelected={onRowsSelected}
+                onScrollStateChanged={(s) => setWheelScrollLocked(s !== "idle")}
                 canIncrease={canIncreaseRows}
                 canDecrease={canDecreaseRows}
                 arrowColor={colors.textSecondary}
@@ -512,6 +573,7 @@ function Settings() {
                   String(GRID_STEPS[columnsStepForPage(p)].columns)
                 }
                 onSelected={onColumnsSelected}
+                onScrollStateChanged={(s) => setWheelScrollLocked(s !== "idle")}
                 canIncrease={canIncreaseColumns}
                 canDecrease={canDecreaseColumns}
                 arrowColor={colors.textSecondary}
@@ -615,7 +677,7 @@ function Settings() {
                 fontFamily: resolveFont("regular"),
               }}
             >
-              to discuss
+              weekly recaps
             </Text>
           </Pressable>
         )}
@@ -768,6 +830,8 @@ function Settings() {
         visible={exportFormatDialogVisible}
         transparent
         animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={() => setExportFormatDialogVisible(false)}
       >
         <Pressable
@@ -862,6 +926,8 @@ function Settings() {
         visible={importChoiceDialogVisible}
         transparent
         animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={() => setImportChoiceDialogVisible(false)}
       >
         <Pressable
@@ -919,14 +985,22 @@ function Settings() {
       </Modal>
 
       <Modal
-        visible={exportType !== null}
+        visible={exportType !== null && !dateRangePickerVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setExportType(null)}
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => {
+          setDateRangePickerVisible(false);
+          setExportType(null);
+        }}
       >
         <Pressable
           style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
-          onPress={() => setExportType(null)}
+          onPress={() => {
+            setDateRangePickerVisible(false);
+            setExportType(null);
+          }}
         >
           <Pressable
             style={[styles.box, { backgroundColor: colors.modalBackground }]}
@@ -1005,61 +1079,138 @@ function Settings() {
                   placeholderTextColor={colors.textSecondary}
                 />
 
-                {(exportType === "txt" || exportType === "csv") && (
-                  <>
-                    <Text
-                      style={[
-                        styles.inputLabel,
-                        {
-                          color: colors.textSecondary,
-                          fontFamily: resolveFont("regular"),
-                        },
-                      ]}
-                    >
-                      Start Date (YYYY-MM-DD):
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.inputField,
-                        {
-                          color: colors.text,
-                          borderBottomColor: colors.textSecondary,
-                          fontFamily: resolveFont("regular"),
-                        },
-                      ]}
-                      value={startDate}
-                      onChangeText={setStartDate}
-                      placeholder="e.g. 2026-01-01 (optional)"
-                      placeholderTextColor={colors.textSecondary}
-                    />
+                {(exportType === "txt" || exportType === "csv") &&
+                  (nativeRangePickerSupported ? (
+                    <>
+                      <Text
+                        style={[
+                          styles.inputLabel,
+                          {
+                            color: colors.textSecondary,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                      >
+                        Date Range:
+                      </Text>
+                      <View style={styles.dateRangeRow}>
+                        <Pressable
+                          onPress={() => void openDateRangePicker()}
+                          style={[
+                            styles.dateRangeButton,
+                            {
+                              backgroundColor: colors.backgroundElement,
+                              borderColor: colors.textSecondary + "55",
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name="calendar-outline"
+                            size={16}
+                            color={colors.text}
+                          />
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.dateRangeText,
+                              {
+                                color:
+                                  startDate || endDate
+                                    ? colors.text
+                                    : colors.textSecondary,
+                                fontFamily: resolveFont("regular"),
+                              },
+                            ]}
+                          >
+                            {formatExportDateRangeLabel(startDate, endDate)}
+                          </Text>
+                        </Pressable>
+                        {(startDate || endDate) && (
+                          <Pressable
+                            onPress={() => {
+                              setStartDate("");
+                              setEndDate("");
+                            }}
+                            style={[
+                              styles.dateRangeClearBtn,
+                              { backgroundColor: colors.backgroundElement },
+                            ]}
+                          >
+                            <Ionicons
+                              name="close"
+                              size={16}
+                              color={colors.textSecondary}
+                            />
+                          </Pressable>
+                        )}
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Text
+                        style={[
+                          styles.inputLabel,
+                          {
+                            color: colors.textSecondary,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                      >
+                        Start Date (YYYY-MM-DD):
+                      </Text>
+                      <TextInput
+                        style={[
+                          styles.inputField,
+                          {
+                            color: colors.text,
+                            borderBottomColor: colors.textSecondary,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                        value={startDate}
+                        onChangeText={setStartDate}
+                        placeholder="e.g. 2026-01-01 (optional)"
+                        placeholderTextColor={colors.textSecondary}
+                      />
 
-                    <Text
-                      style={[
-                        styles.inputLabel,
-                        {
-                          color: colors.textSecondary,
-                          fontFamily: resolveFont("regular"),
-                        },
-                      ]}
-                    >
-                      End Date (YYYY-MM-DD):
-                    </Text>
-                    <TextInput
-                      style={[
-                        styles.inputField,
-                        {
-                          color: colors.text,
-                          borderBottomColor: colors.textSecondary,
-                          fontFamily: resolveFont("regular"),
-                        },
-                      ]}
-                      value={endDate}
-                      onChangeText={setEndDate}
-                      placeholder="e.g. 2026-12-31 (optional)"
-                      placeholderTextColor={colors.textSecondary}
-                    />
-                  </>
-                )}
+                      <Text
+                        style={[
+                          styles.inputLabel,
+                          {
+                            color: colors.textSecondary,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                      >
+                        End Date (YYYY-MM-DD):
+                      </Text>
+                      <TextInput
+                        style={[
+                          styles.inputField,
+                          {
+                            color: colors.text,
+                            borderBottomColor: colors.textSecondary,
+                            fontFamily: resolveFont("regular"),
+                          },
+                        ]}
+                        value={endDate}
+                        onChangeText={setEndDate}
+                        placeholder="e.g. 2026-12-31 (optional)"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.dateRangeHint,
+                          {
+                            color: colors.textSecondary,
+                            fontFamily: resolveFont("italic"),
+                          },
+                        ]}
+                      >
+                        calendar range picker available after native app rebuild
+                      </Text>
+                    </>
+                  ))}
               </>
             )}
 
@@ -1120,6 +1271,8 @@ function Settings() {
         visible={studioModalVisible}
         transparent
         animationType="fade"
+        statusBarTranslucent
+        navigationBarTranslucent
         onRequestClose={() => setStudioModalVisible(false)}
       >
         <View style={styles.overlay}>
@@ -1763,7 +1916,7 @@ function Settings() {
                     { color: colors.text, fontFamily: resolveFont("regular") },
                   ]}
                 >
-                  to discuss switch
+                  weekly recaps switch
                 </Text>
                 <Ionicons
                   name={
@@ -1794,7 +1947,7 @@ function Settings() {
                       { color: colors.text, fontFamily: resolveFont("bold") },
                     ]}
                   >
-                    locked &quot;to discuss&quot; tab ({toDiscussEnabled ? "on" : "off"})
+                    locked &quot;weekly recaps&quot; tab ({toDiscussEnabled ? "on" : "off"})
                   </Text>
                   <View style={styles.gridStepRow}>
                     {[false, true].map((val) => {
@@ -1863,6 +2016,7 @@ function Settings() {
               </View>
             </ScrollView>
           </View>
+          {studioModalVisible && <ToastHost hostId="settings-studio" />}
         </View>
       </Modal>
 
@@ -1877,50 +2031,21 @@ function Settings() {
         onCancel={() => setResetConfirmVisible(false)}
       />
 
-      <Modal
-        visible={infoDialog.visible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setInfoDialog({ visible: false, message: "" })}
-      >
-        <Pressable
-          style={[styles.overlay, { backgroundColor: colors.modalOverlay }]}
-          onPress={() => setInfoDialog({ visible: false, message: "" })}
-        >
-          <Pressable
-            style={[styles.box, { backgroundColor: colors.modalBackground }]}
-            onPress={() => {}}
-          >
-            <Text
-              style={[
-                styles.message,
-                { color: colors.text, fontFamily: resolveFont("regular") },
-              ]}
-            >
-              {infoDialog.message}
-            </Text>
-            <Pressable
-              style={[
-                styles.dialogButton,
-                { backgroundColor: colors.text, width: "100%" },
-              ]}
-              onPress={() => setInfoDialog({ visible: false, message: "" })}
-            >
-              <Text
-                style={[
-                  styles.dialogButtonText,
-                  {
-                    color: colors.background,
-                    fontFamily: resolveFont("bold"),
-                  },
-                ]}
-              >
-                ok
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <NativeDateRangePicker
+        visible={dateRangePickerVisible}
+        startDate={startDate}
+        endDate={endDate}
+        colorScheme={scheme === "dark" ? "dark" : "light"}
+        colors={colors}
+        isoStartDate={isoDateToUtcMidnightIso(startDate || pickerDefaultStart)}
+        isoEndDate={isoDateToUtcMidnightIso(endDate || pickerDefaultEnd)}
+        extractIsoDate={utcDateToIsoDate}
+        onSelectRange={(nextStart, nextEnd) => {
+          setStartDate(nextStart);
+          setEndDate(nextEnd);
+        }}
+        onDismiss={() => setDateRangePickerVisible(false)}
+      />
     </View>
   );
 }

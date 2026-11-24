@@ -1,13 +1,16 @@
 import { AppearanceProvider, useAppearance } from "@/contexts/appearance-context";
 import { NavDirectionProvider } from "@/contexts/nav-direction-context";
 import { SettingsProvider } from "@/contexts/settings-context";
+import { ToastProvider } from "@/contexts/toast-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import { useFonts } from "expo-font";
+import { NavigationBar } from "expo-navigation-bar";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Easing, View } from "react-native";
+import { Animated, Easing } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -39,6 +42,7 @@ function ThemedRoot() {
       renderToHardwareTextureAndroid={isThemeFading}
     >
       <StatusBar style={scheme === "dark" ? "light" : "dark"} animated />
+      <NavigationBar style={scheme === "dark" ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false }} />
     </Animated.View>
   );
@@ -66,11 +70,16 @@ export default function Layout() {
   return (
     <SettingsProvider>
       <AppearanceProvider>
-        <NavDirectionProvider>
-          <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-            <ThemedRoot />
-          </View>
-        </NavDirectionProvider>
+        <ToastProvider>
+          <NavDirectionProvider>
+            <GestureHandlerRootView
+              style={{ flex: 1 }}
+              onLayout={onLayoutRootView}
+            >
+              <ThemedRoot />
+            </GestureHandlerRootView>
+          </NavDirectionProvider>
+        </ToastProvider>
       </AppearanceProvider>
     </SettingsProvider>
   );

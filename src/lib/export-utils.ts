@@ -3,6 +3,11 @@ import {
   sortTodosChronologically,
   type TodoTask,
 } from "../components/sleep-modal/todo.utils.ts";
+import {
+  getWeekDateRange,
+  parseWeekKey,
+  type DiscussionTopic,
+} from "../components/to-discuss/to-discuss.utils.ts";
 
 export type ExportSleepLog = {
   date: string;
@@ -60,16 +65,42 @@ export function buildJsonExportPayload(params: {
   edits: ExportSleepLogEdit[];
   bodyCareLogs: ExportBodyCareLog[];
   todos: TodoTask[];
+  discussionTopics?: DiscussionTopic[];
   bodyCareEnabled: boolean;
 }) {
   return {
     export_date: params.exportedAt,
-    version: "1.2.0",
+    version: "1.3.0",
     logs: params.logs,
     edits: params.edits,
     bodyCareLogs: params.bodyCareEnabled ? params.bodyCareLogs : [],
     todos: params.todos,
+    discussionTopics: params.discussionTopics ?? [],
   };
+}
+
+function formatWeekDiscussionBlock(
+  weekKey: string,
+  startDateStr: string,
+  endDateStr: string,
+  topics: DiscussionTopic[],
+): string {
+  const parsed = parseWeekKey(weekKey);
+  const label = parsed ? `W${parsed.week}` : weekKey;
+  let block = `Week ${label} (${startDateStr} to ${endDateStr}) - Weekly Recaps (${topics.length}):\n`;
+  for (const t of topics) {
+    const box = t.completed ? "[x]" : "[ ]";
+    const completedSuffix =
+      t.completed && t.completed_at ? ` (completed ${t.completed_at})` : "";
+    block += `  - ${box} ${t.title}${completedSuffix}\n`;
+    if (t.description.trim().length > 0) {
+      for (const descLine of t.description.split(/\r?\n/)) {
+        block += `        ${descLine}\n`;
+      }
+    }
+  }
+  block += `---------------------------\n`;
+  return block;
 }
 
 export function buildTxtExportContent(params: {
@@ -77,6 +108,7 @@ export function buildTxtExportContent(params: {
   edits: ExportSleepLogEdit[];
   bodyCareLogs: ExportBodyCareLog[];
   todos: TodoTask[];
+  discussionTopics?: DiscussionTopic[];
   startDate: string;
   endDate: string;
   moodStarsEnabled: boolean;
@@ -90,6 +122,7 @@ export function buildTxtExportContent(params: {
     edits,
     bodyCareLogs,
     todos,
+    discussionTopics = [],
     startDate,
     endDate,
     moodStarsEnabled,
@@ -132,9 +165,55 @@ export function buildTxtExportContent(params: {
     }
   }
 
+  const topicsByWeek = new Map<string, DiscussionTopic[]>();
+  const sortedTopics = [...discussionTopics].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at),
+  );
+  for (const topic of sortedTopics) {
+    const bucket = topicsByWeek.get(topic.week_key);
+    if (bucket) bucket.push(topic);
+    else topicsByWeek.set(topic.week_key, [topic]);
+  }
+
+  const weekEntries: {
+    weekKey: string;
+    startDateStr: string;
+    endDateStr: string;
+    topics: DiscussionTopic[];
+  }[] = [];
+  for (const [weekKey, weekTopics] of topicsByWeek.entries()) {
+    const parsed = parseWeekKey(weekKey);
+    if (!parsed) continue;
+    const range = getWeekDateRange(parsed.weekYear, parsed.week);
+    if (startDate && range.endDateStr < startDate) continue;
+    if (endDate && range.startDateStr > endDate) continue;
+    weekEntries.push({
+      weekKey,
+      startDateStr: range.startDateStr,
+      endDateStr: range.endDateStr,
+      topics: weekTopics,
+    });
+  }
+  weekEntries.sort((a, b) => a.endDateStr.localeCompare(b.endDateStr));
+
+  let nextWeekIdx = 0;
   let fileContent = `SLEEP / MOOD LOG REPORT (${startDate || "All Time"} to ${endDate || "All Time"})\n\n`;
 
   for (const log of filteredLogs) {
+    while (
+      nextWeekIdx < weekEntries.length &&
+      weekEntries[nextWeekIdx].endDateStr < log.date
+    ) {
+      const w = weekEntries[nextWeekIdx];
+      fileContent += formatWeekDiscussionBlock(
+        w.weekKey,
+        w.startDateStr,
+        w.endDateStr,
+        w.topics,
+      );
+      nextWeekIdx++;
+    }
+
     const bodyCare = bodyCareByDate.get(log.date);
     fileContent += `Date: ${log.date}\n`;
     fileContent += `Hours Slept: ${log.hours}\n`;
@@ -189,6 +268,31 @@ export function buildTxtExportContent(params: {
     }
 
     fileContent += `---------------------------\n`;
+
+    while (
+      nextWeekIdx < weekEntries.length &&
+      weekEntries[nextWeekIdx].endDateStr === log.date
+    ) {
+      const w = weekEntries[nextWeekIdx];
+      fileContent += formatWeekDiscussionBlock(
+        w.weekKey,
+        w.startDateStr,
+        w.endDateStr,
+        w.topics,
+      );
+      nextWeekIdx++;
+    }
+  }
+
+  while (nextWeekIdx < weekEntries.length) {
+    const w = weekEntries[nextWeekIdx];
+    fileContent += formatWeekDiscussionBlock(
+      w.weekKey,
+      w.startDateStr,
+      w.endDateStr,
+      w.topics,
+    );
+    nextWeekIdx++;
   }
 
   return fileContent;
@@ -225,9 +329,15 @@ export const CSV_HEADER = [
   "todo_created_at",
   "todo_completed_at",
   "todo_expires_date",
+  "discussion_week",
+  "discussion_title",
+  "discussion_description",
+  "discussion_completed",
+  "discussion_created_at",
 ] as const;
 
 const TODO_TRAIL_EMPTY = Array(6).fill("") as string[];
+const DISCUSSION_TRAIL_EMPTY = Array(5).fill("") as string[];
 
 export function csvEscapeCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
@@ -238,6 +348,7 @@ export function buildCsvExportContent(params: {
   edits: ExportSleepLogEdit[];
   bodyCareLogs: ExportBodyCareLog[];
   todos: TodoTask[];
+  discussionTopics?: DiscussionTopic[];
   startDate: string;
   endDate: string;
   moodStarsEnabled: boolean;
@@ -251,6 +362,7 @@ export function buildCsvExportContent(params: {
     edits,
     bodyCareLogs,
     todos,
+    discussionTopics = [],
     startDate,
     endDate,
     moodStarsEnabled,
@@ -269,6 +381,14 @@ export function buildCsvExportContent(params: {
     startDate,
     endDate,
   );
+  const filteredTopics = filterByDateRange(
+    [...discussionTopics].sort((a, b) =>
+      a.created_at.localeCompare(b.created_at),
+    ),
+    (t) => t.created_date,
+    startDate,
+    endDate,
+  );
 
   const rowsData: string[][] = [[...CSV_HEADER]];
 
@@ -283,6 +403,7 @@ export function buildCsvExportContent(params: {
       log.updated_at ?? "",
       ...Array(17).fill(""),
       ...TODO_TRAIL_EMPTY,
+      ...DISCUSSION_TRAIL_EMPTY,
     ]);
   }
 
@@ -308,6 +429,7 @@ export function buildCsvExportContent(params: {
       String(edit.changed_comment),
       ...Array(6).fill(""),
       ...TODO_TRAIL_EMPTY,
+      ...DISCUSSION_TRAIL_EMPTY,
     ]);
   }
 
@@ -324,6 +446,7 @@ export function buildCsvExportContent(params: {
         bodyCare.amounts["bottom-right"] ?? "",
         bodyCare.updated_at ?? "",
         ...TODO_TRAIL_EMPTY,
+        ...DISCUSSION_TRAIL_EMPTY,
       ]);
     }
   }
@@ -341,9 +464,69 @@ export function buildCsvExportContent(params: {
         todo.created_at,
         todo.completed_at ?? "",
         todo.expires_date,
+        ...DISCUSSION_TRAIL_EMPTY,
       ]);
     }
   }
 
+  for (const topic of filteredTopics) {
+    rowsData.push([
+      "discussion",
+      topic.created_date,
+      ...Array(28).fill(""),
+      topic.week_key,
+      topic.title,
+      topic.description,
+      topic.completed ? "yes" : "no",
+      topic.created_at,
+    ]);
+  }
+
   return rowsData.map((r) => r.map(csvEscapeCell).join(",")).join("\n");
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Converts a YYYY-MM-DD calendar date to UTC midnight ISO string expected by
+ * Compose Material 3 DateRangePickerState.
+ */
+export function isoDateToUtcMidnightIso(dateStr: string): string | null {
+  if (!ISO_DATE_RE.test(dateStr)) return null;
+  return `${dateStr}T00:00:00.000Z`;
+}
+
+/**
+ * Extracts YYYY-MM-DD in UTC from a Date returned by Material 3 DateRangePicker
+ * (which represents selected calendar days at UTC midnight regardless of local TZ).
+ */
+export function utcDateToIsoDate(date: Date | null | undefined): string {
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function formatExportDateRangeLabel(
+  startDate: string,
+  endDate: string,
+): string {
+  if (startDate && endDate) return `${startDate} -> ${endDate}`;
+  if (startDate) return `from ${startDate}`;
+  if (endDate) return `until ${endDate}`;
+  return "all time";
+}
+
+export function computeMinMaxIsoDates(
+  candidates: (string | null | undefined)[],
+): { minDate: string | null; maxDate: string | null } {
+  let minDate: string | null = null;
+  let maxDate: string | null = null;
+  for (const val of candidates) {
+    if (!val || !ISO_DATE_RE.test(val)) continue;
+    if (minDate === null || val < minDate) minDate = val;
+    if (maxDate === null || val > maxDate) maxDate = val;
+  }
+  return { minDate, maxDate };
 }

@@ -45,3 +45,11 @@ export function getNavProgress(screen: ScreenKey): number {
   if (screen === "to-discuss") return 0.5;
   return 1;
 }
+
+export function getNavBarBottomOffset(bottomInset: number): number {
+  return Math.max(24, bottomInset + 12);
+}
+
+export function getNavBarClearance(bottomInset: number): number {
+  return 102 + getNavBarBottomOffset(bottomInset);
+}

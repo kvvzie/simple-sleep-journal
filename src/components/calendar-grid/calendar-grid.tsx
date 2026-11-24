@@ -1,6 +1,8 @@
 import { useAppearance } from "@/contexts/appearance-context";
+import { getNavBarClearance } from "@/contexts/nav-utils";
 import { useSettings } from "@/contexts/settings-context";
 import { getAllLoggedDates, getMonthLogs, initDB } from "@/lib/db";
+import { useHeaderWidthSync } from "@/hooks/use-header-width-sync";
 import { FontVariant } from "@/lib/theme-utils";
 import { ThemePaletteColors } from "@/types/appearance";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,15 +19,18 @@ import {
   Animated,
   BackHandler,
   DeviceEventEmitter,
-  Easing,
   LayoutChangeEvent,
   Pressable,
+  StyleSheet,
   Text,
   ToastAndroid,
   useWindowDimensions,
   View,
 } from "react-native";
-import PagerView from "react-native-pager-view";
+import SmoothHorizontalPager, {
+  type SmoothHorizontalPagerHandle,
+} from "../smooth-pager";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SleepModal from "../sleep-modal";
 import {
   getDayCellWidth,
@@ -36,29 +41,29 @@ import {
 } from "./calendar-grid.styles";
 import {
   CalendarDay,
-  computeWidthScale,
   evaluatePageSelected,
   getCalendarDays,
+  getDragPreviewPage,
   getMonthKey,
-  getScaledMeasuredWidth,
-  getSwipeTargetPage,
   groupDatesByMonth,
   isScrollSettled,
   MONTH_NAMES,
   resolveCanceledSwipePage,
+  SWIPE_RETURN_THRESHOLD,
+  SWIPE_TRIGGER_THRESHOLD,
 } from "./calendar-grid.utils";
 
 const CENTER_PAGE = 60;
 const TOTAL_PAGES = CENTER_PAGE * 2 + 1;
 const MAX_PAGE = TOTAL_PAGES - 1;
-const MONTH_RENDER_RADIUS = 2;
+const MONTH_RENDER_RADIUS = 12;
 const GRID_RENDER_RADIUS = 2;
+const CALENDAR_GRID_EXTRA_OFFSETS = [-12, 12] as const;
 
 const YEAR_RANGE = 5;
 const YEAR_TOTAL_PAGES = YEAR_RANGE * 2 + 1;
 const YEAR_CENTER_PAGE = YEAR_RANGE;
 
-const TEXT_PADDING = 48;
 const DEFAULT_MONTH_WIDTH = 140;
 const DEFAULT_YEAR_WIDTH = 200;
 
@@ -66,12 +71,9 @@ const MONTH_FIXED_WIDTH = 320;
 const YEAR_FIXED_WIDTH = 300;
 const MONTH_BASE_FONT_SIZE = 52;
 const YEAR_BASE_FONT_SIZE = 72;
-const HEADER_ANIM_DURATION = 260;
 const MEASURE_CONTAINER_WIDTH = 1200;
-const SWIPE_TRIGGER_THRESHOLD = 0.06;
 
 const EMPTY_DATE_SET = new Set<string>();
-const PAGE_INDICES = Array.from({ length: TOTAL_PAGES }, (_, p) => p);
 const YEAR_PAGE_INDICES = Array.from({ length: YEAR_TOTAL_PAGES }, (_, p) => p);
 const MONTH_INDICES = Array.from({ length: 12 }, (_, m) => m);
 
@@ -88,123 +90,6 @@ function pageToYearMonth(page: number, baseYear: number, baseMonth: number) {
 
 function clampPage(p: number) {
   return Math.max(0, Math.min(MAX_PAGE, p));
-}
-
-function useHeaderWidthSync(options: {
-  activeKey: number;
-  measureKey: string;
-  fixedWidth: number;
-  defaultWidth: number;
-  minScale: number;
-}) {
-  const { activeKey, measureKey, fixedWidth, defaultWidth, minScale } = options;
-  const maxTextWidth = fixedWidth - 8;
-
-  const [fontScale, setFontScale] = useState(1);
-  const widthAnim = useRef(new Animated.Value(defaultWidth)).current;
-  const widthsByKey = useRef<Record<string, Record<number, number>>>({});
-  const snappedKey = useRef<string | null>(null);
-  const activeAnim = useRef<Animated.CompositeAnimation | null>(null);
-
-  const activeKeyRef = useRef(activeKey);
-  const measureKeyRef = useRef(measureKey);
-  const scaleRef = useRef(fontScale);
-
-  useLayoutEffect(() => {
-    activeKeyRef.current = activeKey;
-    measureKeyRef.current = measureKey;
-    scaleRef.current = fontScale;
-  }, [activeKey, measureKey, fontScale]);
-
-  const animateTo = useCallback(
-    (target: number) => {
-      activeAnim.current?.stop();
-      const anim = Animated.timing(widthAnim, {
-        toValue: target,
-        duration: HEADER_ANIM_DURATION,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      });
-      activeAnim.current = anim;
-      anim.start(() => {
-        if (activeAnim.current === anim) {
-          activeAnim.current = null;
-        }
-      });
-    },
-    [widthAnim],
-  );
-
-  useEffect(() => {
-    const scale = computeWidthScale(
-      widthsByKey.current[measureKey],
-      maxTextWidth,
-      minScale,
-    );
-    setFontScale(scale);
-  }, [measureKey, maxTextWidth, minScale]);
-
-  useEffect(() => {
-    const target = getScaledMeasuredWidth(
-      widthsByKey.current[measureKey],
-      activeKey,
-      fontScale,
-      maxTextWidth,
-    );
-    if (target === undefined) return;
-    if (snappedKey.current !== measureKey) {
-      activeAnim.current?.stop();
-      widthAnim.setValue(target);
-      snappedKey.current = measureKey;
-      return;
-    }
-    animateTo(target);
-  }, [activeKey, measureKey, fontScale, maxTextWidth, widthAnim, animateTo]);
-
-  const onMeasure = useCallback(
-    (itemKey: number, rawWidth: number) => {
-      const bucket = (widthsByKey.current[measureKey] ??= {});
-      bucket[itemKey] = rawWidth;
-      const scale = computeWidthScale(bucket, maxTextWidth, minScale);
-      if (scale !== scaleRef.current) {
-        setFontScale(scale);
-      }
-      if (
-        measureKey === measureKeyRef.current &&
-        itemKey === activeKeyRef.current
-      ) {
-        const scaledWidth = Math.min(maxTextWidth, rawWidth * scale);
-        if (snappedKey.current !== measureKey) {
-          activeAnim.current?.stop();
-          widthAnim.setValue(scaledWidth);
-          snappedKey.current = measureKey;
-        } else {
-          animateTo(scaledWidth);
-        }
-      }
-    },
-    [measureKey, maxTextWidth, minScale, widthAnim, animateTo],
-  );
-
-  const containerWidth = useMemo(
-    () => Animated.add(widthAnim, TEXT_PADDING),
-    [widthAnim],
-  );
-  const pagerMarginLeft = useMemo(
-    () =>
-      Animated.multiply(
-        Animated.add(widthAnim, TEXT_PADDING - fixedWidth),
-        0.5,
-      ),
-    [widthAnim, fixedWidth],
-  );
-
-  return {
-    fontScale,
-    containerWidth,
-    pagerMarginLeft,
-    onMeasure,
-  };
 }
 
 type YearPageProps = {
@@ -350,10 +235,14 @@ const GridPage = memo(function GridPage({
 function CalendarGrid() {
   const { colors, resolveFont, backgrounds } = useAppearance();
   const { rows, columns } = useSettings();
+  const insets = useSafeAreaInsets();
   const totalCells = rows * columns;
 
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const rowHeight = getGridRowHeight(screenHeight, rows);
+  const rowHeight = getGridRowHeight(screenHeight, rows, insets.bottom);
+  const containerBottomPadding = Math.round(
+    getNavBarClearance(insets.bottom) / 3,
+  );
   const GRID_WIDTH = Math.min(screenWidth * 0.88, 500);
   const [gridWidth, setGridWidth] = useState(GRID_WIDTH);
 
@@ -378,9 +267,9 @@ function CalendarGrid() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const backPressCount = useRef(0);
 
-  const gridPagerRef = useRef<PagerView>(null);
-  const yearPagerRef = useRef<PagerView>(null);
-  const monthPagerRef = useRef<PagerView>(null);
+  const gridPagerRef = useRef<SmoothHorizontalPagerHandle>(null);
+  const yearPagerRef = useRef<SmoothHorizontalPagerHandle>(null);
+  const monthPagerRef = useRef<SmoothHorizontalPagerHandle>(null);
 
   const lastSyncedPage = useRef(CENTER_PAGE);
   const lastYearPage = useRef(YEAR_CENTER_PAGE);
@@ -408,7 +297,10 @@ function CalendarGrid() {
   const activeSourceRef = useRef<PagerKey | null>(null);
   const gridScaleAnim = useRef(new Animated.Value(1)).current;
 
-  const refs: Record<PagerKey, React.RefObject<PagerView | null>> = {
+  const refs: Record<
+    PagerKey,
+    React.RefObject<SmoothHorizontalPagerHandle | null>
+  > = {
     year: yearPagerRef,
     month: monthPagerRef,
     grid: gridPagerRef,
@@ -445,6 +337,7 @@ function CalendarGrid() {
     fixedWidth: YEAR_FIXED_WIDTH,
     defaultWidth: DEFAULT_YEAR_WIDTH,
     minScale: 0.7,
+    minWidthDelta: 6,
   });
 
   const allLogsRequestId = useRef(0);
@@ -528,12 +421,13 @@ function CalendarGrid() {
   }, []);
 
   const safeSetPage = (key: PagerKey, targetPage: number) => {
-    expectedPageRef.current[key] = targetPage;
     if (scrollStates.current[key] === "idle") {
+      expectedPageRef.current[key] = undefined;
       refs[key].current?.setPageWithoutAnimation(targetPage);
       if (key === "year") lastYearPage.current = targetPage;
       delete pendingUpdates.current[key];
     } else {
+      expectedPageRef.current[key] = targetPage;
       pendingUpdates.current[key] = targetPage;
     }
   };
@@ -627,7 +521,7 @@ function CalendarGrid() {
     if (pendingUpdates.current[key] !== undefined) {
       const target = pendingUpdates.current[key]!;
       delete pendingUpdates.current[key];
-      expectedPageRef.current[key] = target;
+      expectedPageRef.current[key] = undefined;
       refs[key].current?.setPageWithoutAnimation(target);
       if (key === "year") lastYearPage.current = target;
     }
@@ -697,31 +591,28 @@ function CalendarGrid() {
       dragStartPosRef.current = scrollPos;
     }
 
-    // Measure threshold from where the gesture started so mid-settle grabs still require 6% movement.
+    // Measure threshold from where the gesture started so mid-settle grabs still require full swipe distance.
     const gestureMovedScrollPos = anchor + (scrollPos - dragStartPosRef.current);
-    const target = getSwipeTargetPage(
-      gestureMovedScrollPos,
-      anchor,
-      SWIPE_TRIGGER_THRESHOLD,
-      0,
+    const preview = getDragPreviewPage({
+      scrollPos: gestureMovedScrollPos,
+      anchorPage: anchor,
+      committedDir: dragCommittedDirRef.current,
+      isDragging: scrollStates.current[source] === "dragging",
+      triggerThreshold: SWIPE_TRIGGER_THRESHOLD,
+      returnThreshold: SWIPE_RETURN_THRESHOLD,
+      minPage: 0,
       maxPage,
-    );
-    if (target === null || target === anchor) return;
+    });
+    if (preview === null) return;
 
-    const newDir: -1 | 1 = target > anchor ? 1 : -1;
-    if (
-      dragCommittedDirRef.current === 0 ||
-      (scrollStates.current[source] === "dragging" &&
-        newDir !== dragCommittedDirRef.current)
-    ) {
-      dragCommittedDirRef.current = newDir;
-      hadMovedInGestureRef.current = true;
-      if (source === "year") {
-        lastYearPage.current = target;
-        syncAllPagers(yearPageToCalendarPage(target), "year", true);
-      } else {
-        syncAllPagers(target, source, true);
-      }
+    dragCommittedDirRef.current = preview.nextDir;
+    hadMovedInGestureRef.current = preview.nextDir !== 0;
+    const bounce = preview.nextDir !== 0;
+    if (source === "year") {
+      lastYearPage.current = preview.targetPage;
+      syncAllPagers(yearPageToCalendarPage(preview.targetPage), "year", bounce);
+    } else {
+      syncAllPagers(preview.targetPage, source, bounce);
     }
   };
 
@@ -817,6 +708,7 @@ function CalendarGrid() {
       style={[
         styles.container,
         {
+          paddingBottom: containerBottomPadding,
           backgroundColor: backgrounds.calendar
             ? "transparent"
             : colors.background,
@@ -896,10 +788,13 @@ function CalendarGrid() {
                 marginLeft: yearHeader.pagerMarginLeft,
               }}
             >
-              <PagerView
+              <SmoothHorizontalPager
                 ref={yearPagerRef}
-                style={{ width: YEAR_FIXED_WIDTH, height: 90 }}
+                pageCount={YEAR_TOTAL_PAGES}
                 initialPage={YEAR_CENTER_PAGE}
+                pageWidth={YEAR_FIXED_WIDTH}
+                windowRadius={YEAR_RANGE}
+                style={{ width: YEAR_FIXED_WIDTH, height: 90 }}
                 onPageSelected={onYearPageSelected}
                 onPageScroll={(e) => handlePageScroll("year", e)}
                 onPageScrollStateChanged={(e) =>
@@ -908,11 +803,10 @@ function CalendarGrid() {
                     e.nativeEvent.pageScrollState,
                   )
                 }
-              >
-                {YEAR_PAGE_INDICES.map((p) => {
+                renderPage={(p) => {
                   const py = baseYear + (p - YEAR_CENTER_PAGE);
                   return (
-                    <View key={p} style={styles.yearPage}>
+                    <View style={[styles.yearPage, { flex: 1 }]}>
                       <YearPage
                         yearValue={py}
                         textColor={colors.text}
@@ -922,8 +816,8 @@ function CalendarGrid() {
                       />
                     </View>
                   );
-                })}
-              </PagerView>
+                }}
+              />
             </Animated.View>
           </Animated.View>
         </View>
@@ -967,11 +861,13 @@ function CalendarGrid() {
                 marginLeft: monthHeader.pagerMarginLeft,
               }}
             >
-              <PagerView
+              <SmoothHorizontalPager
                 ref={monthPagerRef}
-                style={{ width: MONTH_FIXED_WIDTH, height: 90 }}
+                pageCount={TOTAL_PAGES}
                 initialPage={CENTER_PAGE}
-                offscreenPageLimit={MONTH_RENDER_RADIUS}
+                pageWidth={MONTH_FIXED_WIDTH}
+                windowRadius={MONTH_RENDER_RADIUS}
+                style={{ width: MONTH_FIXED_WIDTH, height: 90 }}
                 onPageSelected={(e) => onHorizontalPageSelected("month", e)}
                 onPageScroll={(e) => handlePageScroll("month", e)}
                 onPageScrollStateChanged={(e) =>
@@ -980,25 +876,21 @@ function CalendarGrid() {
                     e.nativeEvent.pageScrollState,
                   )
                 }
-              >
-                {PAGE_INDICES.map((p) => {
-                  const isNear = Math.abs(p - page) <= MONTH_RENDER_RADIUS;
+                renderPage={(p) => {
                   const { month: pm } = pageToYearMonth(p, baseYear, baseMonth);
                   return (
-                    <View key={p} style={styles.monthPage}>
-                      {isNear && (
-                        <MonthPage
-                          monthIndex={pm}
-                          textColor={colors.text}
-                          fontFamily={titleFont}
-                          fontSize={monthFontSize}
-                          maxWidth={MONTH_FIXED_WIDTH}
-                        />
-                      )}
+                    <View style={[styles.monthPage, { flex: 1 }]}>
+                      <MonthPage
+                        monthIndex={pm}
+                        textColor={colors.text}
+                        fontFamily={titleFont}
+                        fontSize={monthFontSize}
+                        maxWidth={MONTH_FIXED_WIDTH}
+                      />
                     </View>
                   );
-                })}
-              </PagerView>
+                }}
+              />
             </Animated.View>
           </Animated.View>
         </View>
@@ -1018,24 +910,29 @@ function CalendarGrid() {
         onTouchEnd={() => releaseIfNotDragging("grid")}
         onTouchCancel={() => releaseIfNotDragging("grid")}
         onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}
-        style={{ transform: [{ scale: gridScaleAnim }] }}
+        style={[
+          styles.pager,
+          {
+            width: GRID_WIDTH,
+            height: rows * rowHeight,
+            transform: [{ scale: gridScaleAnim }],
+          },
+        ]}
       >
-        <PagerView
+        <SmoothHorizontalPager
           ref={gridPagerRef}
-          style={[
-            styles.pager,
-            { height: rows * rowHeight, width: GRID_WIDTH },
-          ]}
+          pageCount={TOTAL_PAGES}
           initialPage={CENTER_PAGE}
-          offscreenPageLimit={GRID_RENDER_RADIUS}
+          pageWidth={GRID_WIDTH}
+          windowRadius={GRID_RENDER_RADIUS}
+          extraOffsets={CALENDAR_GRID_EXTRA_OFFSETS}
+          style={{ height: rows * rowHeight, width: GRID_WIDTH }}
           onPageSelected={(e) => onHorizontalPageSelected("grid", e)}
           onPageScroll={(e) => handlePageScroll("grid", e)}
           onPageScrollStateChanged={(e) =>
             handleScrollStateChanged("grid", e.nativeEvent.pageScrollState)
           }
-        >
-          {PAGE_INDICES.map((p) => {
-            const isNear = Math.abs(p - page) <= GRID_RENDER_RADIUS;
+          renderPage={(p) => {
             const { year: py, month: pm } = pageToYearMonth(
               p,
               baseYear,
@@ -1044,31 +941,25 @@ function CalendarGrid() {
             const pageLoggedDates =
               loggedByMonth.get(getMonthKey(py, pm)) ?? EMPTY_DATE_SET;
             return (
-              <View
-                key={p}
-                style={[styles.grid, { width: GRID_WIDTH }]}
-                collapsable={false}
-              >
-                {isNear && (
-                  <GridPage
-                    year={py}
-                    month={pm}
-                    loggedDates={pageLoggedDates}
-                    totalCells={totalCells}
-                    cellWidth={cellWidth}
-                    rowHeight={rowHeight}
-                    fontSize={dayFontSize}
-                    colors={colors}
-                    boldFont={boldFont}
-                    regularFont={regularFont}
-                    italicFont={italicFont}
-                    onDayPress={handleDayPress}
-                  />
-                )}
+              <View style={[styles.grid, { width: GRID_WIDTH }]}>
+                <GridPage
+                  year={py}
+                  month={pm}
+                  loggedDates={pageLoggedDates}
+                  totalCells={totalCells}
+                  cellWidth={cellWidth}
+                  rowHeight={rowHeight}
+                  fontSize={dayFontSize}
+                  colors={colors}
+                  boldFont={boldFont}
+                  regularFont={regularFont}
+                  italicFont={italicFont}
+                  onDayPress={handleDayPress}
+                />
               </View>
             );
-          })}
-        </PagerView>
+          }}
+        />
       </Animated.View>
 
       <SleepModal

@@ -1,11 +1,16 @@
 import assert from "node:assert";
 import test from "node:test";
 import type { TodoTask } from "../src/components/sleep-modal/todo.utils.ts";
+import type { DiscussionTopic } from "../src/components/to-discuss/to-discuss.utils.ts";
 import {
   buildCsvExportContent,
   buildJsonExportPayload,
   buildTxtExportContent,
+  computeMinMaxIsoDates,
   CSV_HEADER,
+  formatExportDateRangeLabel,
+  isoDateToUtcMidnightIso,
+  utcDateToIsoDate,
 } from "../src/lib/export-utils.ts";
 
 const csvEscape = (v: unknown) => {
@@ -266,5 +271,152 @@ test("buildJsonExportPayload includes todos alongside existing backup fields", (
 
   assert.strictEqual(payload.logs.length, SAMPLE_LOGS.length);
   assert.strictEqual(payload.todos.length, SAMPLE_TODOS.length);
+  assert.deepStrictEqual(payload.discussionTopics, []);
+});
+
+const SAMPLE_TOPICS: DiscussionTopic[] = [
+  {
+    id: "topic_1",
+    week_key: "2026-W47",
+    title: "sleep onset worry",
+    description: "talk about Sunday anxiety\nand racing thoughts",
+    completed: true,
+    completed_at: "2026-11-21T16:00:00.000Z",
+    created_date: "2026-11-18",
+    created_at: "2026-11-18T10:00:00.000Z",
+    updated_at: "2026-11-21T16:00:00.000Z",
+  },
+];
+
+test("buildTxtExportContent appends discussion topics at the end of each week", () => {
+  const txt = buildTxtExportContent({
+    logs: SAMPLE_LOGS,
+    edits: [],
+    bodyCareLogs: [],
+    todos: [],
+    discussionTopics: SAMPLE_TOPICS,
+    startDate: "",
+    endDate: "",
+    moodStarsEnabled: true,
+    bodyCareEnabled: false,
+    commentsEnabled: true,
+    todoListEnabled: false,
+    todayDate: "2026-11-22",
+  });
+
+  const thursdayIdx = txt.indexOf("Date: 2026-11-19");
+  const weekIdx = txt.indexOf("Week W47 (2026-11-16 to 2026-11-22) - Weekly Recaps (1):");
+  assert.ok(thursdayIdx !== -1 && weekIdx > thursdayIdx);
+  assert.ok(txt.includes("- [x] sleep onset worry (completed 2026-11-21T16:00:00.000Z)"));
+  assert.ok(txt.includes("talk about Sunday anxiety"));
+  assert.ok(txt.includes("and racing thoughts"));
+});
+
+test("buildCsvExportContent emits discussion rows by created_date and preserves column count", () => {
+  const csv = buildCsvExportContent({
+    logs: [SAMPLE_LOGS[0]],
+    edits: [],
+    bodyCareLogs: [],
+    todos: [],
+    discussionTopics: SAMPLE_TOPICS,
+    startDate: "",
+    endDate: "",
+    moodStarsEnabled: true,
+    bodyCareEnabled: false,
+    commentsEnabled: true,
+    todoListEnabled: false,
+    todayDate: "2026-11-22",
+  });
+
+  // Parse quoted CSV records (descriptions may contain embedded newlines)
+  const records: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let i = 0; i < csv.length; i++) {
+    const ch = csv[i];
+    if (inQuotes) {
+      if (ch === '"' && csv[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n") {
+      row.push(cell);
+      records.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  row.push(cell);
+  records.push(row);
+
+  assert.strictEqual(records.length, 3);
+  for (const r of records) {
+    assert.strictEqual(r.length, CSV_HEADER.length);
+  }
+  assert.strictEqual(records[2][0], "discussion");
+  assert.strictEqual(records[2][1], "2026-11-18");
+  assert.ok(records[2].includes("2026-W47"));
+  assert.ok(records[2].includes("sleep onset worry"));
+  assert.ok(records[2].includes("talk about Sunday anxiety\nand racing thoughts"));
+  assert.ok(records[2].includes("yes"));
+  assert.ok(records[2].includes("2026-11-18T10:00:00.000Z"));
+});
+
+test("native date range picker ISO helpers roundtrip dates cleanly in UTC", () => {
+  assert.strictEqual(
+    isoDateToUtcMidnightIso("2026-11-23"),
+    "2026-11-23T00:00:00.000Z",
+  );
+  assert.strictEqual(isoDateToUtcMidnightIso(""), null);
+  assert.strictEqual(isoDateToUtcMidnightIso("2026-1-2"), null);
+
+  assert.strictEqual(
+    utcDateToIsoDate(new Date("2026-11-23T00:00:00.000Z")),
+    "2026-11-23",
+  );
+  assert.strictEqual(utcDateToIsoDate(null), "");
+  assert.strictEqual(utcDateToIsoDate(new Date("invalid")), "");
+
+  assert.strictEqual(formatExportDateRangeLabel("", ""), "all time");
+  assert.strictEqual(
+    formatExportDateRangeLabel("2026-01-01", "2026-11-23"),
+    "2026-01-01 -> 2026-11-23",
+  );
+  assert.strictEqual(
+    formatExportDateRangeLabel("2026-01-01", ""),
+    "from 2026-01-01",
+  );
+  assert.strictEqual(
+    formatExportDateRangeLabel("", "2026-11-23"),
+    "until 2026-11-23",
+  );
+
+  assert.deepStrictEqual(
+    computeMinMaxIsoDates([
+      null,
+      undefined,
+      "bad-date",
+      "2026-11-18",
+      "2026-09-03",
+      "2026-12-01",
+    ]),
+    { minDate: "2026-09-03", maxDate: "2026-12-01" },
+  );
+  assert.deepStrictEqual(computeMinMaxIsoDates([null, "invalid"]), {
+    minDate: null,
+    maxDate: null,
+  });
 });
 

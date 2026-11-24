@@ -1,6 +1,8 @@
 import assert from "node:assert";
 import test from "node:test";
 import {
+  getNavBarBottomOffset,
+  getNavBarClearance,
   getNavProgress,
   getNextTabIndexOnSwipe,
   getTabIndex,
@@ -59,4 +61,12 @@ test("getNavProgress keeps settings pinned at 1 and calendar at 0 regardless of 
   assert.strictEqual(getNavProgress("calendar"), 0);
   assert.strictEqual(getNavProgress("to-discuss"), 0.5);
   assert.strictEqual(getNavProgress("settings"), 1);
+});
+
+test("getNavBarBottomOffset and getNavBarClearance adapt safely to system navigation insets", () => {
+  assert.strictEqual(getNavBarBottomOffset(0), 24);
+  assert.strictEqual(getNavBarBottomOffset(24), 36);
+  assert.strictEqual(getNavBarBottomOffset(48), 60);
+  assert.strictEqual(getNavBarClearance(0), 126);
+  assert.strictEqual(getNavBarClearance(48), 162);
 });

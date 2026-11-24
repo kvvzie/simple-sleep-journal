@@ -145,14 +145,16 @@ Feature Toggles:
                                      Enable daily text notes and comments (default: true)
   --todo-list=<true|false>           (alias: --todoList, --todos, --todo, --no-todo-list)
                                      Enable to-do list with 3-day carryover (default: true)
-  --to-discuss-toggle=<true|false>   (alias: --toDiscussToggle, --no-to-discuss-toggle)
-                                     Show "to discuss" switch in Settings (default: true)
-  --to-discuss-default=<true|false>  (alias: --toDiscussDefault, --toDiscuss, --to-discuss)
-                                     Enable/disable the "to discuss" nav tab by default (default: true)
+  --to-discuss-toggle=<true|false>   (alias: --toDiscussToggle, --weekly-recaps-toggle, --no-to-discuss-toggle)
+                                     Show "weekly recaps" switch in Settings (default: true)
+  --to-discuss-default=<true|false>  (alias: --toDiscussDefault, --weekly-recaps, --to-discuss)
+                                     Enable/disable the "weekly recaps" nav tab by default (default: true)
   --grid-picker=<true|false>         (alias: --gridPicker, --grid, --flexible-grid, --no-grid-picker)
                                      Enable flexible rows/cols stepper in settings (default: true)
   --color-scheme-toggle=<true|false> (alias: --colorSchemeToggle, --scheme-toggle, --no-color-scheme-toggle)
                                      Enable dark/light appearance switcher (default: true)
+  --icon=<path>                      (alias: --app-icon, --appIcon)
+                                     Custom launcher icon PNG for baked builds (default: assets/images/cat-icon.png)
 
 Baked Theme & Color Palette Presets:
   --theme=<preset>                   (alias: --palette)
@@ -299,6 +301,8 @@ async function run() {
     true,
     "toDiscussToggle",
     "to-discuss-toggle",
+    "weeklyRecapsToggle",
+    "weekly-recaps-toggle",
   );
   let toDiscussDefaultEnabled = getBoolArg(
     args,
@@ -307,7 +311,12 @@ async function run() {
     "to-discuss-default",
     "toDiscuss",
     "to-discuss",
+    "weeklyRecapsDefault",
+    "weekly-recaps-default",
+    "weeklyRecaps",
+    "weekly-recaps",
   );
+  let customIconArg = getArg(args, "icon", "appIcon", "app-icon") || null;
   let gridPickerEnabled = getBoolArg(
     args,
     true,
@@ -438,10 +447,10 @@ async function run() {
     const qTodoList = (await rl.question("Enable to-do list? [Y/n]: ")).trim().toLowerCase();
     todoListEnabled = qTodoList !== "n" && qTodoList !== "no";
 
-    const qToDiscussToggle = (await rl.question('Show "to discuss" switch in Settings? [Y/n]: ')).trim().toLowerCase();
+    const qToDiscussToggle = (await rl.question('Show "weekly recaps" switch in Settings? [Y/n]: ')).trim().toLowerCase();
     toDiscussToggleEnabled = qToDiscussToggle !== "n" && qToDiscussToggle !== "no";
     if (!toDiscussToggleEnabled) {
-      const qToDiscussDefault = (await rl.question('Enable "to discuss" tab when locked? [Y/n]: ')).trim().toLowerCase();
+      const qToDiscussDefault = (await rl.question('Enable "weekly recaps" tab when locked? [Y/n]: ')).trim().toLowerCase();
       toDiscussDefaultEnabled = qToDiscussDefault !== "n" && qToDiscussDefault !== "no";
     }
 
@@ -660,8 +669,23 @@ async function run() {
     if (rawApp.expo.ios) {
       rawApp.expo.ios.bundleIdentifier = packageId;
     }
-    if (mode === "baked") {
-      rawApp.expo.icon = "./assets/images/icon-cat.png";
+    const resolvedBakedIcon = (() => {
+      if (customIconArg) {
+        const p = path.isAbsolute(customIconArg)
+          ? customIconArg
+          : path.resolve(ROOT_DIR, customIconArg);
+        if (fs.existsSync(p)) return p;
+      }
+      const candidates = [
+        path.join(ROOT_DIR, "assets/images/cat-icon.png"),
+        path.join(ROOT_DIR, "assets/images/icon-cat.png"),
+      ];
+      return candidates.find((c) => fs.existsSync(c)) || null;
+    })();
+
+    if (mode === "baked" && resolvedBakedIcon) {
+      const relIcon = path.relative(ROOT_DIR, resolvedBakedIcon).replace(/\\/g, "/");
+      rawApp.expo.icon = relIcon.startsWith(".") ? relIcon : `./${relIcon}`;
     } else {
       rawApp.expo.icon = "./assets/images/icon.png";
     }
@@ -669,28 +693,36 @@ async function run() {
     console.log(`[build-wizard] Updated ${APP_JSON_PATH}`);
 
     try {
-      if (mode === "baked") {
-        const catIconPath = path.join(ROOT_DIR, "assets/images/icon-cat.png");
-        if (fs.existsSync(catIconPath)) {
-          const SIZES = [
-            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-mdpi"), size: 48 },
-            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-hdpi"), size: 72 },
-            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xhdpi"), size: 96 },
-            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xxhdpi"), size: 144 },
-            { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xxxhdpi"), size: 192 },
-          ];
-          for (const item of SIZES) {
-            if (fs.existsSync(item.dir)) {
-              execSync(
-                `ffmpeg -y -i "${catIconPath}" -vf "scale=${item.size}:${item.size}" "${path.join(item.dir, "ic_launcher.webp")}" 2>/dev/null`,
-              );
-              execSync(
-                `ffmpeg -y -i "${catIconPath}" -vf "scale=${item.size}:${item.size}" "${path.join(item.dir, "ic_launcher_round.webp")}" 2>/dev/null`,
-              );
-            }
+      if (mode === "baked" && resolvedBakedIcon) {
+        const SIZES = [
+          { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-mdpi"), legacy: 48, adaptive: 108 },
+          { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-hdpi"), legacy: 72, adaptive: 162 },
+          { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xhdpi"), legacy: 96, adaptive: 216 },
+          { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xxhdpi"), legacy: 144, adaptive: 324 },
+          { dir: path.join(ROOT_DIR, "android/app/src/main/res/mipmap-xxxhdpi"), legacy: 192, adaptive: 432 },
+        ];
+        for (const item of SIZES) {
+          if (fs.existsSync(item.dir)) {
+            const legacyFilter = `scale=${item.legacy}:${item.legacy}:force_original_aspect_ratio=increase,crop=${item.legacy}:${item.legacy}`;
+            const adaptiveFilter = `scale=${item.adaptive}:${item.adaptive}:force_original_aspect_ratio=increase,crop=${item.adaptive}:${item.adaptive}`;
+            execSync(
+              `ffmpeg -y -i "${resolvedBakedIcon}" -vf "${legacyFilter}" "${path.join(item.dir, "ic_launcher.webp")}" 2>/dev/null`,
+            );
+            execSync(
+              `ffmpeg -y -i "${resolvedBakedIcon}" -vf "${legacyFilter}" "${path.join(item.dir, "ic_launcher_round.webp")}" 2>/dev/null`,
+            );
+            execSync(
+              `ffmpeg -y -i "${resolvedBakedIcon}" -vf "${adaptiveFilter}" "${path.join(item.dir, "ic_launcher_foreground.webp")}" 2>/dev/null`,
+            );
+            execSync(
+              `ffmpeg -y -i "${resolvedBakedIcon}" -vf "${adaptiveFilter}" "${path.join(item.dir, "ic_launcher_background.webp")}" 2>/dev/null`,
+            );
+            execSync(
+              `ffmpeg -y -i "${resolvedBakedIcon}" -vf "${adaptiveFilter},format=gray" "${path.join(item.dir, "ic_launcher_monochrome.webp")}" 2>/dev/null`,
+            );
           }
-          console.log("[build-wizard] Updated Android launcher mipmap icons with cat icon");
         }
+        console.log(`[build-wizard] Updated Android legacy & adaptive mipmap icons from ${path.basename(resolvedBakedIcon)}`);
       } else {
         const backupDir = path.join(ROOT_DIR, "android/app/src/main/res-vanilla-backup");
         if (fs.existsSync(backupDir)) {
@@ -705,7 +737,9 @@ async function run() {
           console.log("[build-wizard] Restored vanilla Android launcher mipmap icons");
         }
       }
-    } catch {}
+    } catch (iconErr) {
+      console.warn("[build-wizard] Icon update warning:", iconErr?.message || iconErr);
+    }
   }
 
   if (fs.existsSync(STRINGS_XML_PATH)) {

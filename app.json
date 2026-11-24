@@ -41,6 +41,12 @@
       "expo-sharing",
       "expo-image",
       "expo-status-bar",
+      [
+        "expo-navigation-bar",
+        {
+          "enforceContrast": false
+        }
+      ],
       "expo-web-browser"
     ],
     "experiments": {

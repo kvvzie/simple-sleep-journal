@@ -4,6 +4,7 @@ import {
   computeWidthScale,
   evaluatePageSelected,
   getCalendarDays,
+  getDragPreviewPage,
   getMonthKey,
   getScaledMeasuredWidth,
   getSwipeTargetPage,
@@ -11,6 +12,8 @@ import {
   isScrollSettled,
   MONTH_NAMES,
   resolveCanceledSwipePage,
+  SWIPE_RETURN_THRESHOLD,
+  SWIPE_TRIGGER_THRESHOLD,
 } from "../src/components/calendar-grid/calendar-grid.utils.ts";
 
 test("MONTH_NAMES contains all 12 lowercase months", () => {
@@ -240,4 +243,144 @@ test("getCalendarDays classifies past, today, and future days accurately", () =>
   );
   assert.ok(todayCell);
   assert.strictEqual(todayCell.type, "today");
+});
+
+test("getDragPreviewPage restores anchorPage when reversing a drag through the center", () => {
+  // Starting at november (60), dragging slightly right -> october (59)
+  assert.deepStrictEqual(
+    getDragPreviewPage({
+      scrollPos: 59.93,
+      anchorPage: 60,
+      committedDir: 0,
+      isDragging: true,
+      triggerThreshold: 0.06,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    { targetPage: 59, nextDir: -1 },
+  );
+
+  // Inside hysteresis deadzone (-0.04) stays stably on october
+  assert.strictEqual(
+    getDragPreviewPage({
+      scrollPos: 59.96,
+      anchorPage: 60,
+      committedDir: -1,
+      isDragging: true,
+      triggerThreshold: 0.06,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    null,
+  );
+
+  // Pulling back across center (-0.02) restores november (60) cleanly before crossing to december
+  assert.deepStrictEqual(
+    getDragPreviewPage({
+      scrollPos: 59.98,
+      anchorPage: 60,
+      committedDir: -1,
+      isDragging: true,
+      triggerThreshold: 0.06,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    { targetPage: 60, nextDir: 0 },
+  );
+
+  // Continuing past +0.06 moves smoothly from november -> december (61)
+  assert.deepStrictEqual(
+    getDragPreviewPage({
+      scrollPos: 60.07,
+      anchorPage: 60,
+      committedDir: 0,
+      isDragging: true,
+      triggerThreshold: 0.06,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    { targetPage: 61, nextDir: 1 },
+  );
+});
+
+test("getDragPreviewPage uses wider center band with SWIPE_TRIGGER_THRESHOLD and SWIPE_RETURN_THRESHOLD", () => {
+  assert.strictEqual(SWIPE_TRIGGER_THRESHOLD, 0.18);
+  assert.strictEqual(SWIPE_RETURN_THRESHOLD, 0.12);
+
+  // Small accidental movement stays anchored on november (60)
+  assert.strictEqual(
+    getDragPreviewPage({
+      scrollPos: 59.85,
+      anchorPage: 60,
+      committedDir: 0,
+      isDragging: true,
+      triggerThreshold: SWIPE_TRIGGER_THRESHOLD,
+      returnThreshold: SWIPE_RETURN_THRESHOLD,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    null,
+  );
+
+  // Reaching -0.18 switches to october (59)
+  assert.deepStrictEqual(
+    getDragPreviewPage({
+      scrollPos: 59.81,
+      anchorPage: 60,
+      committedDir: 0,
+      isDragging: true,
+      triggerThreshold: SWIPE_TRIGGER_THRESHOLD,
+      returnThreshold: SWIPE_RETURN_THRESHOLD,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    { targetPage: 59, nextDir: -1 },
+  );
+
+  // Pulling back across -0.12 restores november (60) generously early
+  assert.deepStrictEqual(
+    getDragPreviewPage({
+      scrollPos: 59.89,
+      anchorPage: 60,
+      committedDir: -1,
+      isDragging: true,
+      triggerThreshold: SWIPE_TRIGGER_THRESHOLD,
+      returnThreshold: SWIPE_RETURN_THRESHOLD,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    { targetPage: 60, nextDir: 0 },
+  );
+
+  // Anywhere inside [-0.12, +0.17] stays stably on november (60)
+  for (const pos of [59.89, 60.0, 60.09, 60.17]) {
+    assert.strictEqual(
+      getDragPreviewPage({
+        scrollPos: pos,
+        anchorPage: 60,
+        committedDir: 0,
+        isDragging: true,
+        triggerThreshold: SWIPE_TRIGGER_THRESHOLD,
+        returnThreshold: SWIPE_RETURN_THRESHOLD,
+        minPage: 0,
+        maxPage: 120,
+      }),
+      null,
+    );
+  }
+
+  // Only at +0.18 does november advance to december (61)
+  assert.deepStrictEqual(
+    getDragPreviewPage({
+      scrollPos: 60.19,
+      anchorPage: 60,
+      committedDir: 0,
+      isDragging: true,
+      triggerThreshold: SWIPE_TRIGGER_THRESHOLD,
+      returnThreshold: SWIPE_RETURN_THRESHOLD,
+      minPage: 0,
+      maxPage: 120,
+    }),
+    { targetPage: 61, nextDir: 1 },
+  );
 });

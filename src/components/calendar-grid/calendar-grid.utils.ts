@@ -21,8 +21,13 @@ export const NAV_BAR_CLEARANCE = 130;
 export const MIN_ROW_HEIGHT = 46;
 export const MAX_ROW_HEIGHT = 90;
 
-export function getGridRowHeight(screenHeight: number, rows: number) {
-  const available = screenHeight - HEADER_HEIGHT - NAV_BAR_CLEARANCE;
+export function getGridRowHeight(
+  screenHeight: number,
+  rows: number,
+  bottomInset = 0,
+) {
+  const extraBottom = Math.max(0, bottomInset - 16);
+  const available = screenHeight - HEADER_HEIGHT - NAV_BAR_CLEARANCE - extraBottom;
   const raw = available / rows;
   return Math.max(MIN_ROW_HEIGHT, Math.min(MAX_ROW_HEIGHT, raw));
 }
@@ -122,6 +127,62 @@ export function getSwipeTargetPage(
   if (delta >= threshold) {
     return Math.min(maxPage, anchorPage + 1);
   }
+  return null;
+}
+
+/**
+ * Computes the preview target page during an active drag with center-return hysteresis,
+ * so reversing a drag through the center restores `anchorPage` (e.g. october -> november -> december)
+ * instead of jumping directly across it.
+ */
+export const SWIPE_TRIGGER_THRESHOLD = 0.18;
+export const SWIPE_RETURN_THRESHOLD = 0.12;
+
+export function getDragPreviewPage(options: {
+  scrollPos: number;
+  anchorPage: number;
+  committedDir: -1 | 0 | 1;
+  isDragging: boolean;
+  triggerThreshold: number;
+  returnThreshold?: number;
+  minPage: number;
+  maxPage: number;
+}): { targetPage: number; nextDir: -1 | 0 | 1 } | null {
+  const {
+    scrollPos,
+    anchorPage,
+    committedDir,
+    isDragging,
+    triggerThreshold,
+    returnThreshold = triggerThreshold * 0.5,
+    minPage,
+    maxPage,
+  } = options;
+
+  const delta = scrollPos - anchorPage;
+
+  if (delta <= -triggerThreshold) {
+    const targetPage = Math.max(minPage, anchorPage - 1);
+    if (targetPage === anchorPage) return null;
+    if (committedDir === 0 || (isDragging && committedDir !== -1)) {
+      return { targetPage, nextDir: -1 };
+    }
+    return null;
+  }
+
+  if (delta >= triggerThreshold) {
+    const targetPage = Math.min(maxPage, anchorPage + 1);
+    if (targetPage === anchorPage) return null;
+    if (committedDir === 0 || (isDragging && committedDir !== 1)) {
+      return { targetPage, nextDir: 1 };
+    }
+    return null;
+  }
+
+  if (isDragging && committedDir !== 0 && Math.abs(delta) <= returnThreshold) {
+    return { targetPage: anchorPage, nextDir: 0 };
+  }
+
   return null;
 }
 

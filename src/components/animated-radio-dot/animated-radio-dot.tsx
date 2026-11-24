@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Animated, Easing, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { getRadioDotMetrics } from "./radio-dot.utils";
 
 type Props = {
@@ -94,6 +95,9 @@ export default function AnimatedRadioDot({
   }, [checked, snapKey, dotProgress, ringScale]);
 
   const { boxSize, ringSize, strokeWidth, dotSize } = getRadioDotMetrics(size);
+  const center = boxSize / 2;
+  const ringRadius = (ringSize - strokeWidth) / 2;
+  const dotRadius = dotSize / 2;
 
   const dotOpacity = dotProgress.interpolate({
     inputRange: [0, 0.25, 1],
@@ -116,26 +120,37 @@ export default function AnimatedRadioDot({
     >
       <Animated.View
         style={{
-          width: ringSize,
-          height: ringSize,
-          borderRadius: ringSize / 2,
-          borderWidth: strokeWidth,
-          borderColor: color,
-          alignItems: "center",
-          justifyContent: "center",
+          width: boxSize,
+          height: boxSize,
           transform: [{ scale: ringScale }],
         }}
       >
+        <Svg width={boxSize} height={boxSize}>
+          <Circle
+            cx={center}
+            cy={center}
+            r={ringRadius}
+            fill="none"
+            stroke={color}
+            strokeWidth={strokeWidth}
+          />
+        </Svg>
         <Animated.View
+          pointerEvents="none"
           style={{
-            width: dotSize,
-            height: dotSize,
-            borderRadius: dotSize / 2,
-            backgroundColor: color,
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: boxSize,
+            height: boxSize,
             opacity: dotOpacity,
             transform: [{ scale: dotScale }],
           }}
-        />
+        >
+          <Svg width={boxSize} height={boxSize}>
+            <Circle cx={center} cy={center} r={dotRadius} fill={color} />
+          </Svg>
+        </Animated.View>
       </Animated.View>
     </View>
   );

@@ -1,4 +1,5 @@
 import { useAppearance } from "@/contexts/appearance-context";
+import { useToast } from "@/contexts/toast-context";
 import { useAppColorScheme } from "@/hooks/use-app-color-scheme";
 import {
   addTodoTask,
@@ -42,9 +43,17 @@ import {
   View,
   ViewInstance,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimatedRadioDot from "../animated-radio-dot";
 import ConfirmDialog from "../confirm-dialog";
+import { ToastHost } from "../top-toast";
+import {
+  createSleepSessionSnapshot,
+  hasSleepSessionChanges,
+  type SleepSessionSnapshot,
+} from "../top-toast/top-toast.utils";
 import WheelPicker, { WheelPickerHandle } from "../wheel-picker";
+import SleepModalCommentSection from "./sleep-modal-comment";
 import { styles } from "./sleep-modal.styles";
 import TodoListSection from "./todo-list-section";
 
@@ -136,11 +145,13 @@ function formatTimestamp(iso: string) {
 
 export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   const scheme = useAppColorScheme();
+  const insets = useSafeAreaInsets();
   const { colors, features, resolveFont } = useAppearance();
+  const { showToast } = useToast();
 
   const [hours, setHours] = useState<number | null>(null);
   const [mood, setMood] = useState(0);
-  const [comment, setComment] = useState("");
+  const [initialComment, setInitialComment] = useState("");
   const [hasEntry, setHasEntry] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [todoPendingDelete, setTodoPendingDelete] = useState<TodoTask | null>(null);
@@ -160,6 +171,8 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   const [pagerKey, setPagerKey] = useState(0);
 
   const hoursWheelRef = useRef<WheelPickerHandle>(null);
+  const initialSnapshotRef = useRef<SleepSessionSnapshot | null>(null);
+  const todosModifiedRef = useRef(false);
 
   const stateRef = useRef({
     hours: 0,
@@ -220,7 +233,6 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   useEffect(() => {
     stateRef.current.hours = hours ?? 0;
     stateRef.current.mood = mood;
-    stateRef.current.comment = comment;
     stateRef.current.bodyCareEnabled = bodyCareEnabled;
     stateRef.current.bodyCareProductId = selectedBodyCareProductId;
     stateRef.current.bodyCareAmounts = bodyCareAmounts;
@@ -229,13 +241,17 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   }, [
     hours,
     mood,
-    comment,
     bodyCareEnabled,
     selectedBodyCareProductId,
     bodyCareAmounts,
     bodyCareSelectedZones,
     date,
   ]);
+
+  const handleCommentChange = useCallback((nextComment: string) => {
+    stateRef.current.comment = nextComment;
+    stateRef.current.dirty = true;
+  }, []);
 
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const closedRef = useRef(false);
@@ -362,10 +378,12 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     ]);
 
     const h = existing?.hours ?? 0;
+    const nextComment = existing?.comment ?? "";
 
     setHours(h);
     setMood(existing?.mood ?? 0);
-    setComment(existing?.comment ?? "");
+    stateRef.current.comment = nextComment;
+    setInitialComment(nextComment);
 
     bodyCareHeightAnim.stopAnimation();
     bodyCareContentOpacity.stopAnimation();
@@ -423,16 +441,33 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     setTodos(visibleTodos);
 
     stateRef.current.dirty = false;
+    todosModifiedRef.current = false;
+    initialSnapshotRef.current = createSleepSessionSnapshot({
+      hasEntry: Boolean(existing),
+      hours: h,
+      mood: existing?.mood ?? 0,
+      comment: existing?.comment ?? "",
+      bodyCareEnabled: Boolean(bodyCare),
+      bodyCareProductId: bodyCare ? bodyCare.product_id : null,
+      bodyCareAmounts: bodyCare ? bodyCare.amounts : {},
+    });
     setPagerKey((k) => k + 1);
     setReadyHours(h);
   };
 
-  const closeAnimated = () => {
+  const closeAnimated = (onAfterClose?: () => void) => {
     Animated.timing(translateY, {
       toValue: SCREEN_HEIGHT,
       duration: 220,
       useNativeDriver: true,
-    }).start(() => onClose());
+    }).start(() => {
+      onClose();
+      if (onAfterClose) {
+        requestAnimationFrame(() => {
+          onAfterClose();
+        });
+      }
+    });
   };
 
   const getSelectedBodyCareAmounts = (
@@ -456,7 +491,35 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     closedRef.current = true;
     Keyboard.dismiss();
     const s = stateRef.current;
-    closeAnimated();
+    const selectedAmounts = getSelectedBodyCareAmounts(
+      s.bodyCareAmounts,
+      s.bodyCareSelectedZones,
+    );
+    const currentSnapshot = createSleepSessionSnapshot({
+      hasEntry: hasEntry || s.dirty,
+      hours: s.hours,
+      mood: s.mood,
+      comment: s.comment,
+      bodyCareEnabled: s.bodyCareEnabled,
+      bodyCareProductId: s.bodyCareProductId,
+      bodyCareAmounts: selectedAmounts,
+    });
+    const hadSessionChanges = hasSleepSessionChanges({
+      initial: initialSnapshotRef.current,
+      current: currentSnapshot,
+      features: {
+        moodStarsEnabled: features.moodStarsEnabled,
+        bodyCareEnabled: features.bodyCareEnabled,
+        commentsEnabled: features.commentsEnabled,
+      },
+      todosModified: todosModifiedRef.current,
+    });
+
+    closeAnimated(
+      hadSessionChanges
+        ? () => showToast({ message: "saved", icon: "checkmark-outline" })
+        : undefined,
+    );
 
     if (!s.date || !s.dirty) return;
 
@@ -482,7 +545,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
         s.date,
         s.bodyCareEnabled,
         s.bodyCareProductId,
-        getSelectedBodyCareAmounts(s.bodyCareAmounts, s.bodyCareSelectedZones),
+        selectedAmounts,
       );
     }
   };
@@ -569,11 +632,14 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   ).current;
 
   const handleDelete = async () => {
+    if (closedRef.current) return;
     closedRef.current = true;
     if (date) await deleteSleepLog(date);
     onSaved();
     setConfirmVisible(false);
-    closeAnimated();
+    closeAnimated(() => {
+      showToast({ message: "entry deleted", icon: "trash-outline" });
+    });
   };
 
   const refreshTodosForCurrentDate = async () => {
@@ -587,17 +653,20 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
   const handleAddTodo = async (title: string) => {
     if (!date) return;
     await addTodoTask(date, title);
+    todosModifiedRef.current = true;
     await refreshTodosForCurrentDate();
   };
 
   const handleToggleTodo = async (todo: TodoTask) => {
     if (!date) return;
     await toggleTodoCompleted(todo.id, date);
+    todosModifiedRef.current = true;
     await refreshTodosForCurrentDate();
   };
 
   const handleEditTodo = async (todo: TodoTask, nextTitle: string) => {
     await updateTodoTitle(todo.id, nextTitle);
+    todosModifiedRef.current = true;
     await refreshTodosForCurrentDate();
   };
 
@@ -606,6 +675,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
     setTodoPendingDelete(null);
     if (!target) return;
     await deleteTodoTask(target.id);
+    showToast({ message: "task deleted", icon: "trash-outline" });
     await refreshTodosForCurrentDate();
   };
 
@@ -996,6 +1066,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
       animationType="fade"
       onRequestClose={saveAndClose}
       statusBarTranslucent
+      navigationBarTranslucent
       presentationStyle="overFullScreen"
     >
       <KeyboardAvoidingView
@@ -1026,7 +1097,11 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
             <ScrollView
               ref={scrollViewRef}
               scrollEnabled={!scrollLocked}
-              contentContainerStyle={styles.scrollContent}
+              nestedScrollEnabled
+              contentContainerStyle={[
+                styles.scrollContent,
+                { paddingBottom: 36 + insets.bottom },
+              ]}
               keyboardShouldPersistTaps="handled"
             >
               <Text
@@ -1413,46 +1488,13 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
             )}
 
               {features.commentsEnabled && (
-                <>
-                  <Text
-                    style={[
-                      styles.label,
-                      {
-                        color: colors.textSecondary,
-                        fontFamily: resolveFont("italic"),
-                      },
-                    ]}
-                  >
-                    comment
-                  </Text>
-
-                  <View
-                    style={[
-                      styles.commentBox,
-                      { borderColor: colors.textSecondary },
-                    ]}
-                  >
-                    <TextInput
-                      value={comment}
-                      onChangeText={(t) => {
-                        setComment(t);
-                        stateRef.current.dirty = true;
-                      }}
-                      multiline
-                      placeholder="text will be here"
-                      placeholderTextColor={colors.textSecondary}
-                      style={[
-                        styles.commentInput,
-                        {
-                          color: colors.text,
-                          fontFamily: resolveFont(
-                            comment ? "regular" : "italic",
-                          ),
-                        },
-                      ]}
-                    />
-                  </View>
-                </>
+                <SleepModalCommentSection
+                  initialComment={initialComment}
+                  resetKey={pagerKey}
+                  colors={colors}
+                  resolveFont={resolveFont}
+                  onCommentChange={handleCommentChange}
+                />
               )}
 
               {features.todoListEnabled !== false && (
@@ -1576,6 +1618,7 @@ export default function SleepModal({ visible, date, onClose, onSaved }: Props) {
           onConfirm={() => void handleDeleteTodoConfirm()}
           onCancel={() => setTodoPendingDelete(null)}
         />
+        {visible && <ToastHost hostId="sleep-modal" />}
       </KeyboardAvoidingView>
     </Modal>
   );
