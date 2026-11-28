@@ -771,7 +771,7 @@ function Settings() {
         >
           app made by
         </Text>
-        <Pressable onPress={() => Linking.openURL("https://kvvz.xyz")}>
+        <Pressable onPress={() => Linking.openURL("https://simple-sleep-journal.kvvz.xyz")}>
           <Text
             style={[
               styles.madeByName,

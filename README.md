@@ -1,5 +1,7 @@
 # simple-sleep-journal
 
+**Project Page:** [simple-sleep-journal.kvvz.xyz](https://simple-sleep-journal.kvvz.xyz)
+
 A minimalist, privacy-first, offline sleep, mood, and weekly reflection journal built with **React Native (0.88.1)**, **Expo SDK 58**, **Expo Router**, a local **SQLite** database, and a **Three-Tier Build & Runtime Customization System**.
 
 Zero cloud sync, zero analytics, and zero telemetry. Every entry, task, weekly note, and custom theme stays strictly on your device.
